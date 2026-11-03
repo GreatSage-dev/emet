@@ -13,6 +13,7 @@ reference-near-agent-skills/
 .env.*
 *.pem
 *.key
+submission.config.json
 
 # OS & IDE files
 .DS_Store

@@ -9,7 +9,9 @@
     "demo:attack": "node packages/agent-gateway/src/demo-attack.mjs",
     "demo:quote": "node packages/agent-gateway/src/demo-quote.mjs",
     "build": "node packages/cockpit-ui/build.mjs",
-    "dev": "node packages/cockpit-ui/server.mjs"
+    "dev": "node packages/cockpit-ui/server.mjs",
+    "submit:preview": "node scripts/submit.mjs",
+    "submit": "node scripts/submit.mjs --submit"
   },
   "keywords": [
     "near",

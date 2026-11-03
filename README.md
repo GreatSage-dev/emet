@@ -147,6 +147,25 @@ npm run dev
 **See:**
 * Open `http://localhost:4173` (or open `packages/cockpit-ui/dist/index.html` directly in any browser) to test all 4 adversarial and settlement scenarios side-by-side in real time.
 
+### 6. Verify Hackathon Submission Payload (`HACKATHON.md`)
+**Do:**
+```bash
+npm run submit:preview
+```
+**See:**
+* Validates all submission metadata against the official `POST https://nearhackathon.com/api/applications` schema.
+
+---
+
+## Ecosystem Synergy: NEAR AI Cloud & MCP Tooling
+
+* **Verifiable Private Inference via NEAR AI Cloud (`cloud.near.ai`):**
+  Autonomous agents can generate cross-chain intent requests using frontier models running in Intel TDX / NVIDIA TEE hardware via NEAR AI Cloud. Emet ensures that even if prompt injection occurs during inference, the agent cannot execute unapproved actions because the signing key is locked to `emet.near::initiate_intent`.
+* **Model Context Protocol (`nearai/near-mcp` & Agent Connect):**
+  Emet exports standard MCP tools (`emet_evaluate_counterparty`, `emet_initiate_verified_intent`, `emet_get_budget_ledger`) that plug directly into `nearai/near-mcp` and Claude Desktop, giving AI agents deterministic settlement safety without touching private keys.
+* **Agent Skills (`near/agent-skills`):**
+  Emet complements `near-intents` and `near-kit` by adding the missing post-signing settlement verification and counterparty blocklist layer.
+
 ---
 
 ## Empirical Evidence Table

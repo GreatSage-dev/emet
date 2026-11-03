@@ -1,0 +1,10 @@
+{
+  "leadName": "Your Name",
+  "email": "your-email@example.com",
+  "size": "1",
+  "tracks": ["security", "defi", "agents"],
+  "nearAddress": "your-account.near",
+  "projectUrl": "https://github.com/your-username/emet-near",
+  "demoUrl": "https://x.com/your-handle/status/1234567890123456789",
+  "consent": true
+}
