@@ -1,0 +1,11 @@
+[package]
+name = "emet-settlement-contract"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+emet-mpc-verifier = { path = "../mpc-verifier" }
