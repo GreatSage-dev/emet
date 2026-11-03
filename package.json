@@ -1,0 +1,23 @@
+{
+  "name": "emet-near",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Emet — Outcome-Verified Agent Budget & Cross-Chain Settlement Kernel on NEAR",
+  "type": "module",
+  "scripts": {
+    "test": "node --test packages/agent-gateway/tests/settlement.test.mjs",
+    "demo:attack": "node packages/agent-gateway/src/demo-attack.mjs",
+    "demo:quote": "node packages/agent-gateway/src/demo-quote.mjs",
+    "build": "node packages/cockpit-ui/build.mjs",
+    "dev": "node packages/cockpit-ui/server.mjs"
+  },
+  "keywords": [
+    "near",
+    "mpc",
+    "chain-signatures",
+    "near-intents",
+    "ai-agents",
+    "security"
+  ],
+  "license": "MIT"
+}
