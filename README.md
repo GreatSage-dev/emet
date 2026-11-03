@@ -138,16 +138,7 @@ npm run demo:quote
 **See:**
 * JSON output comparing naive unhedged output (`200 bps` spread) vs. Emet MPC-verified output (`10 bps` spread, unlocking `+47.50 USDC` per `2,500 USDC` swap).
 
-### 5. Launch the 15-Second Split-Screen Interactive Cockpit
-**Do:**
-```bash
-npm run build
-npm run dev
-```
-**See:**
-* Open `http://localhost:4173` (or open `packages/cockpit-ui/dist/index.html` directly in any browser) to test all 4 adversarial and settlement scenarios side-by-side in real time.
-
-### 6. Verify Hackathon Submission Payload (`HACKATHON.md`)
+### 5. Verify Hackathon Submission Payload (`HACKATHON.md`)
 **Do:**
 ```bash
 npm run submit:preview
@@ -185,7 +176,6 @@ npm run submit:preview
 * [`crates/mpc-verifier`](./crates/mpc-verifier/src/lib.rs) — Binary-compatible `near/mpc` v3.18.0 `ForeignTxSignPayload::V1` Borsh encoder, FIPS 180-4 SHA-256 hasher, and `SvmFinality::Finalized` / `EvmFinality::Finalized` policy guards.
 * [`crates/settlement-contract`](./crates/settlement-contract/src/lib.rs) — Core NEAR smart contract implementing `EmetSettlementKernel`, `AgentBudgetLedger`, `#[private]` MPC callback reconciliation, and [15-detector security audit tests](./crates/settlement-contract/src/audit_tests.rs).
 * [`packages/agent-gateway`](./packages/agent-gateway/src/index.mjs) — TypeScript/ESM SDK, NEAR Intents 1Click API dry-run client, MCP tool definitions (`emet_evaluate_counterparty`, `emet_initiate_verified_intent`, `emet_get_budget_ledger`), and [`demo-attack.mjs`](./packages/agent-gateway/src/demo-attack.mjs).
-* [`packages/cockpit-ui`](./packages/cockpit-ui/index.html) — Zero-cold-start 15-second split-screen verification web sandbox.
 
 ---
 
