@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mpc-verifier",
+    "crates/settlement-contract",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/emet-protocol/emet-near"
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true

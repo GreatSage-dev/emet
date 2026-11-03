@@ -1,0 +1,21 @@
+# Build artifacts
+target/
+dist/
+node_modules/
+*.wasm
+
+# Reference repositories cloned for local inspection
+reference-near-mpc/
+reference-near-agent-skills/
+
+# Secrets & environment variables
+.env
+.env.*
+*.pem
+*.key
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
