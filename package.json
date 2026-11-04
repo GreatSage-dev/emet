@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test packages/agent-gateway/tests/settlement.test.mjs",
+    "serve:gateway": "node packages/agent-gateway/src/gateway_server.mjs",
     "demo:attack": "node packages/agent-gateway/src/demo-attack.mjs",
     "demo:quote": "node packages/agent-gateway/src/demo-quote.mjs",
     "submit:preview": "node scripts/submit.mjs",

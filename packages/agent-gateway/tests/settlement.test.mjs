@@ -10,6 +10,7 @@ import {
   createEmetMcpTools,
   fetchIntentsDryQuote,
 } from "../src/index.mjs";
+import { createEmetGatewayServer } from "../src/gateway_server.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const wasmContractPath = path.resolve(
@@ -262,5 +263,57 @@ describe("Emet Settlement Kernel & Double-Entry Agent Budget Ledger", () => {
     const quote = await fetchIntentsDryQuote({ amount: "2500000000", timeoutMs: 500 });
     assert.equal(quote.dry, true);
     assert.equal(quote.spreadSavedUnits, "47500000"); // 47.50 USDC saved per 2,500 USDC swap
+  });
+});
+
+describe("Emet Gateway HTTP Server & Ashborn Security Hardening (OWASP API)", () => {
+  it("enforces cross-tenant BOLA isolation (HTTP 403) and blocks Mass Assignment escalation", async () => {
+    const port = 4919;
+    const gateway = createEmetGatewayServer({ port });
+    const baseUrl = await gateway.start();
+
+    try {
+      // 1. Health endpoint
+      const healthRes = await fetch(`${baseUrl}/api/health`);
+      assert.equal(healthRes.status, 200);
+
+      // 2. BOLA / IDOR Defense: Token for beta-striker cannot access alpha-treasury budget
+      const bolaAttackRes = await fetch(`${baseUrl}/api/agents/alpha-treasury.near/budget`, {
+        headers: { Authorization: "Bearer token_beta_striker_session" },
+      });
+      assert.equal(bolaAttackRes.status, 403, "Cross-tenant budget access must return 403");
+      const bolaData = await bolaAttackRes.json();
+      assert.match(bolaData.error, /Cross-tenant agent budget isolation enforced/);
+
+      // 3. Mass Assignment / BOPLA Defense: Non-admin client cannot inject role: "admin"
+      const boplaAttackRes = await fetch(`${baseUrl}/api/agents/beta-striker.near/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer token_beta_striker_session",
+        },
+        body: JSON.stringify({ role: "admin", isAdmin: true, displayName: "Hacked Striker" }),
+      });
+      assert.equal(boplaAttackRes.status, 403, "Privileged role injection must return 403");
+      const boplaData = await boplaAttackRes.json();
+      assert.match(boplaData.error, /Mass assignment violation/);
+
+      // 4. Legitimate profile update without privileged keys succeeds
+      const benignUpdateRes = await fetch(`${baseUrl}/api/agents/beta-striker.near/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer token_beta_striker_session",
+        },
+        body: JSON.stringify({ displayName: "Striker Prime" }),
+      });
+      assert.equal(benignUpdateRes.status, 200);
+      const benignData = await benignUpdateRes.json();
+      assert.equal(benignData.displayName, "Striker Prime");
+      assert.equal(benignData.role, "agent");
+      assert.equal(benignData.isAdmin, false);
+    } finally {
+      await gateway.stop();
+    }
   });
 });
