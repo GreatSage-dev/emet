@@ -25,6 +25,8 @@ pub use emet_mpc_verifier::{
 use std::collections::{BTreeMap, BTreeSet};
 
 pub mod audit_tests;
+#[cfg(target_arch = "wasm32")]
+pub mod near_runtime;
 
 /// Gas constants (in NEAR Tgas units: 1 Tgas = 10^12 gas).
 pub const MPC_VERIFY_GAS: u64 = 100_000_000_000_000; // 100 Tgas for `v1.signer-prod.testnet`
@@ -183,6 +185,8 @@ pub enum KernelError {
     InsufficientAvailableBudget { requested: u128, available: u128 },
     CounterpartyBlocked { counterparty: String, reason: String },
     CounterpartyRequiresHumanApproval { counterparty: String, reason: String },
+    MissionAssetForbidden { token_out: String },
+    MissionSlippageExceeded { expected_min_out: u128, actual_out: u128 },
     FinalityPolicyViolation(String),
     PrivateCallbackOnly,
     ArithmeticOverflow,
@@ -206,7 +210,7 @@ impl EmetSettlementKernel {
             initialized: true,
             owner_id,
             mpc_signer_contract_id,
-            default_domain_id: DomainId(0),
+            default_domain_id: DomainId(3),
             agents: BTreeMap::new(),
             intents: BTreeMap::new(),
             receipts: BTreeMap::new(),
@@ -361,6 +365,32 @@ impl EmetSettlementKernel {
                 profile.prior_successful_settlements, profile.account_age_days
             ),
         }
+    }
+
+    pub fn evaluate_token_diff_mission(
+        &self,
+        allowed_tokens: &BTreeSet<String>,
+        token_out: &str,
+        amount_in: u128,
+        amount_out: u128,
+        min_return_bps: u16,
+    ) -> Result<(), KernelError> {
+        if !allowed_tokens.is_empty() && !allowed_tokens.contains(token_out) {
+            return Err(KernelError::MissionAssetForbidden {
+                token_out: token_out.to_string(),
+            });
+        }
+        let expected_min_out = amount_in
+            .checked_mul(u128::from(min_return_bps))
+            .ok_or(KernelError::ArithmeticOverflow)?
+            / 10_000;
+        if amount_out < expected_min_out {
+            return Err(KernelError::MissionSlippageExceeded {
+                expected_min_out,
+                actual_out: amount_out,
+            });
+        }
+        Ok(())
     }
 
     pub fn initiate_intent(

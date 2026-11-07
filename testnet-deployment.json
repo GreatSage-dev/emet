@@ -1,0 +1,95 @@
+{
+  "network": "testnet",
+  "rpcUrl": "https://rpc.testnet.near.org",
+  "contractId": "emet-v1-mw6z2crp.testnet",
+  "codeHash": "3FuGj5yFKe3tqf2AtzbjLV1X678bSKzfR7jQ7HJaeya4",
+  "deployedAtIso": "2026-11-07T22:27:09.769Z",
+  "mpcSignerContractId": "v1.signer-prod.testnet",
+  "mpcSignerVersion": "3.18.0",
+  "mpcForeignTxDomainId": 3,
+  "ownerPublicKey": "ed25519:HbT4ab5cGmeZKMKrpfDWpKTq47siVDczsuAGnWqWaYFd",
+  "ownerBorshPkHex": "00f68e34d67fc94a5a7ab34fab69331521839dcab6305a37ebbe656abdb2021964",
+  "scopedAgentFunctionCallPublicKey": "ed25519:ETitme5BKyNAb9kK77rPqjKDddFeeATfEij3PzXhwXHv",
+  "scopedAgentBorshPkHex": "00c800662ffd69e9c0fbc1301efef634559fa99fd17b4212522bc97052baeac2fd",
+  "explorerAccountUrl": "https://testnet.nearblocks.io/address/emet-v1-mw6z2crp.testnet",
+  "transactions": {
+    "deployAndInit": {
+      "txHash": "FLV6hg98dgz5Fr1SFSASkRbD5mCjpzPoGm6DtQ2YGvs6",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/FLV6hg98dgz5Fr1SFSASkRbD5mCjpzPoGm6DtQ2YGvs6"
+    },
+    "registerAgentAndFunctionCallKey": {
+      "txHash": "C8uotjdyR67RKjHW7TuYq3sReWJ47SAo64DVdj354pEX",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/C8uotjdyR67RKjHW7TuYq3sReWJ47SAo64DVdj354pEX"
+    },
+    "adversarialFullAccessKeyRejected": {
+      "txHash": "3GULCtCNgWaeqbDUipNjZLxYsRpG1VWenTg35yEeYeev",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/3GULCtCNgWaeqbDUipNjZLxYsRpG1VWenTg35yEeYeev"
+    },
+    "crossContractMpcFailureAtomicRefund": {
+      "txHash": "3ugCAzrDSX8dp5Tjb4h1BsGm3gMZLJjh9YnL9MixQstF",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/3ugCAzrDSX8dp5Tjb4h1BsGm3gMZLJjh9YnL9MixQstF"
+    },
+    "liveBnbFinalizedMpcVerification": {
+      "txHash": "7zAvP3HhLVr4FsqbJ8LtzwhjZyjmggJQsR8JZaYmCPUX",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/7zAvP3HhLVr4FsqbJ8LtzwhjZyjmggJQsR8JZaYmCPUX",
+      "bnbTestnetBlockNumber": 141421132,
+      "bnbTestnetTxIdHex": "642441b3f1bebd9951b09e3fdedee8e03c304e48a1cca726039cfecea9082a05"
+    }
+  },
+  "verifiedOnChainState": {
+    "contractInfo": {
+      "initialized": true,
+      "owner_id": "emet-v1-mw6z2crp.testnet",
+      "mpc_signer_id": "v1.signer-prod.testnet",
+      "domain_id": 3,
+      "agent_count": 1,
+      "intent_count": 2,
+      "receipt_count": 2
+    },
+    "agentLedger": {
+      "agent_id": "emet-v1-mw6z2crp.testnet",
+      "owner_id": "emet-v1-mw6z2crp.testnet",
+      "available_balance": "300000000000000000000000",
+      "in_flight_locked": "0",
+      "settled_spent": "200000000000000000000000",
+      "refunded_saved": "150000000000000000000000",
+      "max_per_tx": "300000000000000000000000",
+      "epoch_spend_cap": "450000000000000000000000",
+      "current_epoch_exposure": "200000000000000000000000",
+      "last_nonce": 2,
+      "authorized_pk_hex": "00c800662ffd69e9c0fbc1301efef634559fa99fd17b4212522bc97052baeac2fd",
+      "allowed_counterparties": [
+        "solver-prime.near"
+      ]
+    },
+    "ghostIntent": {
+      "intent_id": "intent-ghost-refund-01",
+      "agent_id": "emet-v1-mw6z2crp.testnet",
+      "counterparty_id": "solver-prime.near",
+      "amount": "150000000000000000000000",
+      "nonce": 1,
+      "chain": "ethereum",
+      "expected_payload_hash": "2ab97999d1e015730271c7d6cbb298af76fd1de7af81926b42a8877bc4f5794e",
+      "status": {
+        "state": "Refunded",
+        "refunded_at_ms": 1794090384932,
+        "reason": "Foreign chain transaction reverted (TransactionFailed) — ghost deposit blocked"
+      }
+    },
+    "bnbIntent": {
+      "intent_id": "intent-bnb-finalized-02",
+      "agent_id": "emet-v1-mw6z2crp.testnet",
+      "counterparty_id": "solver-prime.near",
+      "amount": "200000000000000000000000",
+      "nonce": 2,
+      "chain": "bnb",
+      "expected_payload_hash": "9a97f0116568c62c8f8cd447215848fb42c6758ec0ce6857947fe01d4e55cf49",
+      "status": {
+        "state": "Settled",
+        "verified_at_ms": 1794090402746,
+        "mpc_payload_hash": "9a97f0116568c62c8f8cd447215848fb42c6758ec0ce6857947fe01d4e55cf49",
+        "mpc_signature": "{\"payload_hash\":\"9a97f0116568c62c8f8cd447215848fb42c6758ec0ce6857947fe01d4e55cf49\",\"signature\":{\"scheme\":\"Secp256k1\",\"big_r\":{\"affine_point\":\"03b4b28bf1ff43e81e38bf3596b6a7ffac3027e2953172aafe4b0f872a1e107720\"},\"s\":{\"scalar\":\"79b3942cc153adb005370230407229cb8384bc8b58877db0058c7af929d2a5ff\"},\"recovery_id\":1}}"
+      }
+    }
+  }
+}

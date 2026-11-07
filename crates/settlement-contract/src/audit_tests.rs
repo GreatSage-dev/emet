@@ -121,9 +121,59 @@ pub fn run_all_audit_assertions() -> bool {
     blocks_non_canonical_solana_micro_fork_reorg();
     rejects_full_access_key_and_enforces_scoped_function_call_key();
     blocks_prompt_injected_agent_paying_reported_malicious_counterparty();
+    blocks_scamcoin_token_diff_and_excessive_slippage_mission_violations();
     prevents_runaway_retry_drain_and_enforces_epoch_caps();
     near_contract_audit_detectors_private_callback_and_yocto_and_u128_json();
     true
+}
+
+#[cfg_attr(test, test)]
+pub fn blocks_scamcoin_token_diff_and_excessive_slippage_mission_violations() {
+    let kernel = setup_kernel();
+    let allowed: BTreeSet<String> = ["nep141:usdc.near".to_string(), "nep141:wrap.near".to_string()]
+        .into_iter()
+        .collect();
+
+    // 1. Prompt-injected attempt to buy SCAMCOIN is rejected by Mission asset check
+    let scam_err = kernel.evaluate_token_diff_mission(
+        &allowed,
+        "nep141:scamcoin.near",
+        50_000_000_000,
+        50_000_000_000,
+        9800,
+    );
+    assert_eq!(
+        scam_err,
+        Err(KernelError::MissionAssetForbidden {
+            token_out: "nep141:scamcoin.near".to_string()
+        })
+    );
+
+    // 2. Drain disguised as a 99% slippage trade on an allowed token is rejected by price collar
+    let slip_err = kernel.evaluate_token_diff_mission(
+        &allowed,
+        "nep141:usdc.near",
+        1_000_000_000,
+        10_000_000, // Only 1% returned against 98% (9800 bps) minimum collar
+        9800,
+    );
+    assert_eq!(
+        slip_err,
+        Err(KernelError::MissionSlippageExceeded {
+            expected_min_out: 980_000_000,
+            actual_out: 10_000_000
+        })
+    );
+
+    // 3. Valid mission trade within 2% slippage collar succeeds
+    let ok_res = kernel.evaluate_token_diff_mission(
+        &allowed,
+        "nep141:usdc.near",
+        1_000_000_000,
+        985_000_000,
+        9800,
+    );
+    assert_eq!(ok_res, Ok(()));
 }
 
 #[cfg_attr(test, test)]
