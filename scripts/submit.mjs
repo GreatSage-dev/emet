@@ -26,13 +26,11 @@ const VALID_TRACKS = new Set([
 
 export function buildEmetIdeaDescription() {
   return (
-    "EMET (אמת) is the outcome-verified double-entry budget and settlement kernel for autonomous AI agents on NEAR. " +
-    "Today, AI agents with autonomous wallet access face two fatal failure modes: runaway retry loops on stalled bridge relayers, and pre-signing policy wrappers that go blind after signing (as demonstrated by the Oct 1 $3.8M NEAR Intents ghost-deposit exploit). " +
-    "EMET enforces a strict Two-Stroke architecture: " +
-    "(1) Pre-signing Shield: AI agents are restricted to hardware-level Function-Call Access Keys scoped strictly to `emet.near::initiate_intent`, locking funds in-flight and checking an on-chain counterparty blocklist. " +
-    "(2) Post-signing Accelerator: EMET queries NEAR's decentralized threshold MPC network (`v1.signer-prod.testnet` v3.18.0) via cross-contract calls to verify foreign chain transaction finality (SvmFinality::Finalized / EvmFinality::Finalized) before releasing escrow. " +
-    "If the foreign tx succeeds, funds settle and solver spreads collapse from 200 bps to 10 bps; if the tx reverts or was a ghost deposit, funds are deterministically refunded. " +
-    "EMET exposes native Model Context Protocol (MCP) tools for AI agents (integrating with nearai/near-mcp and near/agent-skills) and compiles to a zero-overhead Rust WebAssembly contract."
+    "EMET (אמת) lets autonomous AI agents spend safely on NEAR without getting drained by prompt injection, worthless token swaps, or stalled cross-chain bridges. " +
+    "Deployed live on NEAR Testnet (`emet-v1-mw6z2crp.testnet`), EMET enforces a Two-Brain Clean-Room + On-Chain Escrow architecture: " +
+    "(1) Two-Brain Glass Wall & Live NEAR RPC Probe: Brain 1 reads untrusted webpages, invoices, and A2A `x402` quotes, while only typed numbers, token IDs, and receiver accounts cross the Glass Wall into Brain 2—which probes NEAR RPC `view_account` (`code_hash` & account state) and checks Owner-only Mission bounds (allowed output tokens, minimum return collar, spend caps, and shared counterparty blocklist). " +
+    "(2) Scoped FunctionCall Keys & Owner/Agent Separation: Autonomous agents are cryptographically restricted on-chain (`signer_account_pk`) to a NEAR `FunctionCall` key scoped strictly to `initiate_intent` (`FullAccess` keys and self-approved policy overrides are deterministically rejected). " +
+    "(3) Outcome-Verified MPC Escrow (`v1.signer-prod.testnet` v3.18.0): Approved payments lock in `in_flight_locked` escrow and invoke `v1.signer-prod.testnet::verify_foreign_transaction` (`DomainId(3)`). Funds settle ONLY after threshold MPC nodes verify destination chain finality (`Finalized`), or snap 100% back to `available_balance` via `#[private]` callback if the foreign tx fails."
   );
 }
 
@@ -103,9 +101,9 @@ export function createDraftPayload(overrides = {}) {
     leadName: overrides.leadName || "Promise",
     email: overrides.email || "builder@emet.near",
     size: overrides.size || "1",
-    tracks: ["security", "defi", "agents"],
-    nearAddress: overrides.nearAddress || "emet.near",
-    projectUrl: overrides.projectUrl || "https://github.com/emet-protocol/emet-near",
+    tracks: ["security", "agents", "business"],
+    nearAddress: overrides.nearAddress || "emet-v1-mw6z2crp.testnet",
+    projectUrl: overrides.projectUrl || "https://github.com/GreatSage-dev/emet",
     demoUrl: overrides.demoUrl || "https://x.com/NEARProtocol/status/1234567890123456789",
     idea: buildEmetIdeaDescription(),
     consent: true,
