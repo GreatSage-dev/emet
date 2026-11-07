@@ -2,14 +2,23 @@
  * Emet Agent Settlement Gateway — HTTP REST Server & Multi-Tenant Agent API
  * Exposes Emet double-entry budget ledger, counterparty risk engine, and 1Click quote proxy.
  */
+import fs from "node:fs";
 import { createServer } from "node:http";
-import { URL } from "node:url";
+import path from "node:path";
+import { URL, fileURLToPath } from "node:url";
 import {
   EmetKernelSimulator,
   fetchIntentsDryQuote,
   computeForeignTxPayloadHashV1,
+  evaluateDualBrainPipeline,
   MPC_SIGNER_CONTRACT,
 } from "./index.mjs";
+import { callNearViewFunction } from "./near_testnet.mjs";
+import { COCKPIT_HTML } from "./cockpit_html.mjs";
+import { LANDING_HTML } from "./landing_html.mjs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const TESTNET_MANIFEST_PATH = path.resolve(__dirname, "../../../testnet-deployment.json");
 
 export function createEmetGatewayServer({
   port = 4173,
@@ -54,16 +63,35 @@ export function createEmetGatewayServer({
     ],
   });
 
+  kernel.upsertCounterparty({
+    receiverId: "new-gpu-node.near",
+    accountAgeDays: 14,
+    isContract: true,
+    codeChangedRecently: true,
+    priorSuccessfulSettlements: 2,
+    reportedMaliciousBy: [],
+  });
+
   const tokenToAgentMap = new Map([
     ["token_alpha_treasury_session", "alpha-treasury.near"],
     ["token_beta_striker_session", "beta-striker.near"],
+    ["token_owner_wallet_session", "owner.near"],
+    ["token_admin_root_session", "admin.near"],
+  ]);
+
+  const ownerAuthorizedTokens = new Set([
+    "token_owner_wallet_session",
+    "token_admin_root_session",
   ]);
 
   const server = createServer(async (req, res) => {
     // CORS & JSON headers
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-agent-id");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-Owner-Authorization, x-agent-id"
+    );
 
     const method = req.method || "GET";
     if (method === "OPTIONS") {
@@ -75,20 +103,90 @@ export function createEmetGatewayServer({
     const parsedUrl = new URL(req.url || "/", `http://127.0.0.1:${port}`);
     const pathname = parsedUrl.pathname.replace(/\/+$/, "") || "/";
 
-    // Authentication Helper
+    // Authentication Helper: strict separation between Agent session and Human Owner key
     const authHeader = req.headers["authorization"] || "";
     const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const ownerHeader = req.headers["x-owner-authorization"] || "";
+    const ownerToken = ownerHeader.replace(/^Bearer\s+/i, "").trim();
+    const isOwnerAuthorized =
+      ownerAuthorizedTokens.has(bearerToken) || ownerAuthorizedTokens.has(ownerToken);
     const callerAgentId = tokenToAgentMap.get(bearerToken) || req.headers["x-agent-id"] || null;
+
+    if (method === "GET" && pathname === "/favicon.ico") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (method === "GET" && pathname === "/") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(LANDING_HTML);
+      return;
+    }
+
+    if (method === "GET" && pathname === "/cockpit") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(COCKPIT_HTML);
+      return;
+    }
 
     // ROUTE 1: Gateway Health & MPC Status
     if (method === "GET" && pathname === "/api/health") {
+      const hasManifest = fs.existsSync(TESTNET_MANIFEST_PATH);
+      const manifest = hasManifest
+        ? JSON.parse(fs.readFileSync(TESTNET_MANIFEST_PATH, "utf8"))
+        : null;
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
           status: "ok",
           service: "emet-agent-gateway",
           mpcSigner: MPC_SIGNER_CONTRACT,
+          testnetContractId: manifest?.contractId || null,
           activeAgents: ["alpha-treasury.near", "beta-striker.near"],
+        })
+      );
+      return;
+    }
+
+    // ROUTE 1B: Live NEAR Testnet Contract Deployment & On-Chain State Probe
+    if (method === "GET" && pathname === "/api/testnet/status") {
+      if (!fs.existsSync(TESTNET_MANIFEST_PATH)) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ deployed: false, error: "testnet-deployment.json not found" }));
+        return;
+      }
+      const manifest = JSON.parse(fs.readFileSync(TESTNET_MANIFEST_PATH, "utf8"));
+      let liveRpcLedger = null;
+      let liveRpcSource = "cached-manifest";
+      try {
+        liveRpcLedger = await callNearViewFunction({
+          contractId: manifest.contractId,
+          methodName: "get_agent_ledger",
+          args: { agent_id: manifest.contractId },
+          timeoutMs: 2500,
+        });
+        if (liveRpcLedger && liveRpcLedger.agent_id) {
+          liveRpcSource = "live-near-testnet-rpc";
+        }
+      } catch {
+        // Offline fallback to verified manifest snapshot
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          deployed: true,
+          source: liveRpcSource,
+          contractId: manifest.contractId,
+          codeHash: manifest.codeHash,
+          mpcSignerContractId: manifest.mpcSignerContractId,
+          mpcForeignTxDomainId: manifest.mpcForeignTxDomainId,
+          explorerAccountUrl: manifest.explorerAccountUrl,
+          transactions: manifest.transactions,
+          liveOnChainLedger: liveRpcLedger || manifest.verifiedOnChainState?.agentLedger || null,
+          verifiedIntents: {
+            ghostRefund: manifest.verifiedOnChainState?.ghostIntent || null,
+            bnbSettled: manifest.verifiedOnChainState?.bnbIntent || null,
+          },
         })
       );
       return;
@@ -290,6 +388,191 @@ export function createEmetGatewayServer({
       return;
     }
 
+    // ROUTE 7B: Update Agent Mission Parameters (Owner Policy Control — Strictly Forbidden for Agent Tokens)
+    const missionMatch = pathname.match(/^\/api\/agents\/([^/]+)\/mission$/);
+    if (method === "PUT" && missionMatch) {
+      if (!enableNaiveBypass && !isOwnerAuthorized) {
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error:
+              "Forbidden: Autonomous agent sessions cannot modify owner spending policies. Requires human owner wallet authorization.",
+          })
+        );
+        return;
+      }
+      const targetAgentId = decodeURIComponent(missionMatch[1]);
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        try {
+          const parsed = JSON.parse(body || "{}");
+          const updated = kernel.updateAgentMission({
+            agentId: targetAgentId,
+            ...parsed,
+          });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ status: "updated", ledger: updated }));
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // ROUTE 7C: Two-Brain Clean-Room Evaluation & Automatic Escrow Lock on ALLOW
+    if (method === "POST" && pathname === "/api/dual-brain/evaluate") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", async () => {
+        try {
+          const params = JSON.parse(body || "{}");
+          if (!enableNaiveBypass && params.humanApprovedOverride && !isOwnerAuthorized) {
+            res.writeHead(403, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                status: "forbidden",
+                error:
+                  "Forbidden: Agent session cannot self-approve WARN overrides. Requires separate human owner authorization.",
+              })
+            );
+            return;
+          }
+          const trace = await evaluateDualBrainPipeline({
+            kernel,
+            agentId: params.agentId || "alpha-treasury.near",
+            untrustedExternalText: params.untrustedExternalText || "",
+            proposedTx: params.proposedTx || {},
+            humanApprovedOverride: Boolean(params.humanApprovedOverride),
+          });
+
+          let lockedIntent = null;
+          if (trace.brain2Conscience.verdict === "ALLOW") {
+            const p = trace.glassWall.passedToBrain2;
+            if (params.humanApprovedOverride) {
+              // Owner explicitly approved this counterparty via OutLayer tasks::confirm
+              const agentObj = kernel.agents.get(trace.agentId);
+              if (agentObj) agentObj.allowedCounterparties.add(p.receiverId);
+              kernel.upsertCounterparty({
+                receiverId: p.receiverId,
+                accountAgeDays: 14,
+                isContract: true,
+                codeChangedRecently: false,
+                priorSuccessfulSettlements: 5,
+              });
+            }
+            const chain = p.targetChain || "Solana";
+            const foreignTxSpec =
+              chain === "Solana"
+                ? {
+                    chain: "Solana",
+                    txIdHex: "11".repeat(64),
+                    finality: "Finalized",
+                    extractors: [
+                      { type: "InnerInstruction", instructionIndex: 2, innerInstructionIndex: 0 },
+                    ],
+                    values: [
+                      {
+                        kind: "SvmInnerInstruction",
+                        programIdHex: "33".repeat(32),
+                        accountsHex: ["44".repeat(32), "55".repeat(32)],
+                        dataHex: "deadbeef",
+                      },
+                    ],
+                  }
+                : chain === "Bitcoin"
+                ? {
+                    chain: "Bitcoin",
+                    txIdHex: "55".repeat(32),
+                    confirmations: 6,
+                    extractors: [{ type: "BlockHash" }],
+                    values: [{ kind: "BitcoinBlockHash", blockHashHex: "2a".repeat(32) }],
+                  }
+                : {
+                    chain,
+                    txIdHex: "642441b3f1bebd9951b09e3fdedee8e03c304e48a1cca726039cfecea9082a05",
+                    finality: "Finalized",
+                    extractors: [{ type: "BlockHash" }],
+                    values: [
+                      {
+                        kind: "EvmBlockHash",
+                        blockHashHex:
+                          "9978b780d86d964d76ea8ec6db5c0f5f1c350a7f93ea5c97f25fb468ea1b2b1d",
+                      },
+                    ],
+                  };
+
+            lockedIntent = kernel.initiateIntent({
+              intentId: `intent-${p.nonce}-${Date.now().toString(36)}`,
+              agentId: trace.agentId,
+              counterpartyId: p.receiverId,
+              amount: p.amountIn,
+              nonce: p.nonce,
+              foreignTxSpec,
+            });
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              status: trace.brain2Conscience.verdict,
+              trace,
+              lockedIntent,
+            })
+          );
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ status: "error", error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // ROUTE 7D: List Intents & Reconcile Foreign Outcome (Settle or Snapback Refund)
+    if (method === "GET" && pathname === "/api/intents") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ intents: [...kernel.intents.values()].reverse() }));
+      return;
+    }
+
+    if (method === "POST" && pathname === "/api/intents/reconcile") {
+      if (!enableNaiveBypass && !isOwnerAuthorized) {
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error:
+              "Forbidden: Agent session cannot forge MPC settlement callbacks. Requires MPC callback / owner authorization.",
+          })
+        );
+        return;
+      }
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        try {
+          const { intentId, verdict } = JSON.parse(body || "{}");
+          const receipt = kernel.reconcileForeignOutcome({
+            callerId: "emet.near",
+            intentId,
+            verdict,
+          });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ status: "reconciled", receipt }));
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
     // ROUTE 8: Destructive Administrative Path (Safety Governor Target)
     if (pathname.startsWith("/api/admin/drain_funds") || pathname.startsWith("/api/admin/reset_ledger")) {
       res.writeHead(403, { "Content-Type": "application/json" });
@@ -306,8 +589,8 @@ export function createEmetGatewayServer({
     server,
     start: () =>
       new Promise((resolve) => {
-        server.listen(port, "127.0.0.1", () => {
-          resolve(`http://127.0.0.1:${port}`);
+        server.listen(port, () => {
+          resolve(`http://localhost:${port}`);
         });
       }),
     stop: () =>

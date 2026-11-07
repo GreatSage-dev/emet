@@ -295,10 +295,12 @@ export async function fetchIntentsDryQuote({
       const data = await res.json();
       return {
         source: "live-1click-api",
+        quoteModel: "illustrative_risk_buffer_comparison",
         dry: true,
         originAsset,
         destinationAsset,
         amountIn: String(amount),
+        liveQuoteAmountOut: data?.quote?.amountOut ?? null,
         naiveUnverifiedAmountOut: naiveOut.toString(),
         emetVerifiedAmountOut: emetOut.toString(),
         spreadSavedUnits: capitalSaved.toString(),
@@ -315,10 +317,12 @@ export async function fetchIntentsDryQuote({
 
   return {
     source: "deterministic-1click-fixture",
+    quoteModel: "illustrative_risk_buffer_comparison",
     dry: true,
     originAsset,
     destinationAsset,
     amountIn: String(amount),
+    liveQuoteAmountOut: null,
     naiveUnverifiedAmountOut: naiveOut.toString(),
     emetVerifiedAmountOut: emetOut.toString(),
     spreadSavedUnits: capitalSaved.toString(),
@@ -347,6 +351,9 @@ export class EmetKernelSimulator {
     maxPerTx,
     epochSpendCap,
     allowedCounterparties = [],
+    allowedTokens = ["nep141:usdc.near", "nep141:wrap.near", "solana:USDC", "solana:SOL", "eth:USDC"],
+    minReturnBps = 9800,
+    missionGoal = "Execute cross-chain swaps and pay verified compute providers within 2% slippage",
   }) {
     const ledger = {
       agentId,
@@ -358,9 +365,32 @@ export class EmetKernelSimulator {
       epochSpendCap: BigInt(epochSpendCap),
       currentEpochExposure: 0n,
       allowedCounterparties: new Set(allowedCounterparties),
+      allowedTokens: new Set(allowedTokens),
+      minReturnBps: Number(minReturnBps),
+      missionGoal,
       lastNonce: 0,
     };
     this.agents.set(agentId, ledger);
+    return this.getAgentLedger(agentId);
+  }
+
+  updateAgentMission({
+    agentId,
+    maxPerTx,
+    epochSpendCap,
+    allowedCounterparties,
+    allowedTokens,
+    minReturnBps,
+    missionGoal,
+  }) {
+    const a = this.agents.get(agentId);
+    if (!a) throw new Error(`AGENT_NOT_REGISTERED: ${agentId}`);
+    if (maxPerTx !== undefined) a.maxPerTx = BigInt(maxPerTx);
+    if (epochSpendCap !== undefined) a.epochSpendCap = BigInt(epochSpendCap);
+    if (Array.isArray(allowedCounterparties)) a.allowedCounterparties = new Set(allowedCounterparties);
+    if (Array.isArray(allowedTokens)) a.allowedTokens = new Set(allowedTokens);
+    if (minReturnBps !== undefined) a.minReturnBps = Number(minReturnBps);
+    if (missionGoal !== undefined) a.missionGoal = String(missionGoal);
     return this.getAgentLedger(agentId);
   }
 
@@ -588,6 +618,27 @@ export class EmetKernelSimulator {
     return receipt;
   }
 
+  evaluateTokenDiffMission({ agentId, tokenOut, amountIn, amountOut }) {
+    const a = this.agents.get(agentId);
+    if (!a) throw new Error(`AGENT_NOT_REGISTERED: ${agentId}`);
+    if (tokenOut && a.allowedTokens.size > 0 && !a.allowedTokens.has(tokenOut)) {
+      throw new Error(
+        `MISSION_ASSET_FORBIDDEN: Token ${tokenOut} is not in agent mission allowed_tokens [${[...a.allowedTokens].join(", ")}]`
+      );
+    }
+    if (amountOut !== undefined && amountOut !== null) {
+      const inBig = BigInt(amountIn);
+      const outBig = BigInt(amountOut);
+      const expectedMinOut = (inBig * BigInt(a.minReturnBps)) / 10000n;
+      if (outBig < expectedMinOut) {
+        throw new Error(
+          `MISSION_SLIPPAGE_EXCEEDED: Output ${outBig} is below mission price collar ${expectedMinOut} (${a.minReturnBps} bps)`
+        );
+      }
+    }
+    return true;
+  }
+
   getAgentLedger(agentId) {
     const a = this.agents.get(agentId);
     if (!a) return null;
@@ -600,9 +651,393 @@ export class EmetKernelSimulator {
       maxPerTx: a.maxPerTx.toString(),
       epochSpendCap: a.epochSpendCap.toString(),
       currentEpochExposure: a.currentEpochExposure.toString(),
+      allowedCounterparties: [...a.allowedCounterparties],
+      allowedTokens: [...a.allowedTokens],
+      minReturnBps: a.minReturnBps,
+      missionGoal: a.missionGoal,
       lastNonce: a.lastNonce,
     };
   }
+}
+
+/**
+ * Live NEAR RPC `view_account` Truth Probe (`06-security.md`).
+ * Inspects whether a receiver is a smart contract (`code_hash != 1111...`) and its live state.
+ */
+export async function probeNearAccountLive(accountId, rpcUrl = NEAR_TESTNET_RPC, timeoutMs = 2500) {
+  const SYSTEM_EMPTY_CODE_HASH = "11111111111111111111111111111111";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "emet-account-probe",
+        method: "query",
+        params: {
+          request_type: "view_account",
+          finality: "final",
+          account_id: accountId,
+        },
+      }),
+      signal: controller.signal,
+    });
+    const json = await res.json();
+    if (json?.result?.code_hash) {
+      return {
+        liveRpc: true,
+        accountId,
+        codeHash: json.result.code_hash,
+        isDeployedContract: json.result.code_hash !== SYSTEM_EMPTY_CODE_HASH,
+        storageUsageBytes: json.result.storage_usage,
+        blockHeight: json.result.block_height,
+      };
+    }
+  } catch {
+    // Offline fallback
+  } finally {
+    clearTimeout(timer);
+  }
+  const isKnownContract =
+    accountId.includes("signer") ||
+    accountId.includes("solver") ||
+    accountId.includes("intents") ||
+    accountId.includes("1click");
+  return {
+    liveRpc: false,
+    accountId,
+    codeHash: isKnownContract
+      ? "9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a"
+      : SYSTEM_EMPTY_CODE_HASH,
+    isDeployedContract: isKnownContract,
+    storageUsageBytes: isKnownContract ? 184320 : 412,
+    blockHeight: 276_412_900,
+  };
+}
+
+/**
+ * Deterministic Brain 1 text extractor: parses untrusted web/invoice/paywall text
+ * into a candidate structured payment proposal before crossing the Glass Wall.
+ */
+export function extractProposalFromUntrustedText(
+  untrustedExternalText = "",
+  { agentId = "alpha-treasury.near", fallbackNonce = 1 } = {}
+) {
+  const text = String(untrustedExternalText || "").trim();
+  const injectionDetectedInRawText =
+    /ignore\s+(all\s+)?(previous|prior|everything)|system\s+override|send\s+all\s+funds|drain|urgent\s+admin|bypass\s+(rules|safety|limits)|402\s+payment/i.test(
+      text
+    );
+
+  // 1. Extract destination chain
+  let chain = "Solana";
+  if (/\bbnb\b|\bbsc\b|binance/i.test(text)) chain = "Bnb";
+  else if (/bitcoin|\bbtc\b/i.test(text)) chain = "Bitcoin";
+  else if (/ethereum|\beth\b/i.test(text) && !/solana/i.test(text)) chain = "Ethereum";
+
+  // 2. Extract receiver / counterparty account
+  const ignoredAccounts = new Set([
+    String(agentId).toLowerCase(),
+    "usdc.near",
+    "wrap.near",
+    "wnear.near",
+    "scamcoin.near",
+  ]);
+  let counterpartyId = null;
+  const nearMatches = text.match(/\b([a-z0-9_-]+(?:\.[a-z0-9_-]+)*\.(?:near|testnet))\b/gi) || [];
+  for (const m of nearMatches) {
+    const low = m.toLowerCase();
+    if (!ignoredAccounts.has(low) && !/coin\.near$/i.test(low)) {
+      counterpartyId = low;
+      break;
+    }
+  }
+  if (!counterpartyId) {
+    const hexAddr = text.match(/\b(0x[a-fA-F0-9]{6,42})\b/);
+    if (hexAddr) {
+      counterpartyId = hexAddr[1].toLowerCase();
+    } else {
+      const namedTo = text.match(/\b(?:to|pay|recipient)\s+@?([a-zA-Z0-9_-]{3,28})\b/i);
+      const stopWords = new Set([
+        "solana",
+        "ethereum",
+        "bnb",
+        "bitcoin",
+        "usdc",
+        "usd",
+        "sol",
+        "eth",
+        "btc",
+        "scamcoin",
+        "all",
+        "the",
+        "your",
+        "my",
+        "wallet",
+      ]);
+      if (namedTo && !stopWords.has(namedTo[1].toLowerCase())) {
+        counterpartyId = `${namedTo[1].toLowerCase()}.near`;
+      }
+    }
+  }
+  if (!counterpartyId) counterpartyId = "solver-prime.near";
+
+  // 3. Extract input amount (6-decimal USDC atomic units)
+  let amountInBig = 2_500_000_000n;
+  if (
+    /\b(all\s+(my\s+|your\s+)?funds|entire\s+(wallet|balance|budget)|100%\s+of\s+(funds|balance)|send\s+everything)\b/i.test(
+      text
+    )
+  ) {
+    amountInBig = 50_000_000_000n;
+  } else {
+    const amtMatch =
+      text.match(/\$\s*(\d[\d,]*(?:\.\d+)?)/) ||
+      text.match(/(\d[\d,]*(?:\.\d+)?)\s*(?:usdc|usd|dollars?|usdt)\b/i) ||
+      text.match(/\b(?:send|pay|swap|transfer|wire)\s+\$?(\d[\d,]*(?:\.\d+)?)\b/i);
+    if (amtMatch) {
+      const rawNum = parseFloat(amtMatch[1].replace(/,/g, ""));
+      if (Number.isFinite(rawNum) && rawNum >= 0) {
+        amountInBig = BigInt(Math.round(rawNum * 1_000_000));
+      }
+    }
+  }
+
+  // 4. Extract output token
+  let tokenOut = chain === "Ethereum" ? "nep141:usdc.near" : "solana:USDC";
+  const explicitCoinNear = text.match(/\b([a-z0-9_-]*coin\.near)\b/i);
+  if (explicitCoinNear) {
+    tokenOut = `nep141:${explicitCoinNear[1].toLowerCase()}`;
+  } else if (/\bscamcoin\b/i.test(text)) {
+    tokenOut = "nep141:scamcoin.near";
+  } else if (/solana\s+usdc|usdc\s+on\s+solana|solana:usdc/i.test(text)) {
+    tokenOut = "solana:USDC";
+  } else if (/ethereum\s+usdc|eth\s+usdc|eth:usdc/i.test(text)) {
+    tokenOut = "eth:USDC";
+  } else if (/\bsolana\s+sol\b|\bsolana:sol\b|\binto\s+sol\b/i.test(text)) {
+    tokenOut = "solana:SOL";
+  } else if (/\bwrap\.near\b|\bwnear\b/i.test(text)) {
+    tokenOut = "nep141:wrap.near";
+  } else {
+    const intoTicker = text.match(/\b(?:into|buy)\s+\$?([A-Za-z][A-Za-z0-9_]{2,15})\b/i);
+    const safeWords = new Set(["solana", "ethereum", "bnb", "bitcoin", "usdc", "usd", "sol", "eth"]);
+    if (intoTicker && !safeWords.has(intoTicker[1].toLowerCase())) {
+      tokenOut = `nep141:${intoTicker[1].toLowerCase()}.near`;
+    }
+  }
+
+  // 5. Extract expected return amount (detect one-way sends / x402 drains vs. swaps/quotes)
+  let amountOutBig = amountInBig;
+  const isOneWayDrain =
+    /\b(402\s+payment|paywall|one-way|0\s+return|zero\s+return|no\s+return|drain|steal)\b/i.test(
+      text
+    ) ||
+    (/\b(send|transfer|wire)\b/i.test(text) &&
+      !/\b(swap|exchange|convert|quote|invoice|compute|batch)\b/i.test(text));
+
+  if (isOneWayDrain) {
+    amountOutBig = 0n;
+  } else {
+    const feeMatch = text.match(/(\d+(?:\.\d+)?)\s*%\s*(?:fee|slippage)/i);
+    if (feeMatch) {
+      const feeBps = Math.min(10_000, Math.round(parseFloat(feeMatch[1]) * 100));
+      amountOutBig = (amountInBig * BigInt(10_000 - feeBps)) / 10_000n;
+    } else if (/\bswap\b/i.test(text)) {
+      amountOutBig = (amountInBig * 9980n) / 10_000n;
+    }
+  }
+
+  return {
+    injectionDetectedInRawText,
+    counterpartyId,
+    amount: amountInBig.toString(),
+    amountOut: amountOutBig.toString(),
+    tokenIn: "nep141:usdc.near",
+    tokenOut,
+    chain,
+    nonce: Number(fallbackNonce),
+  };
+}
+
+/**
+ * Dual-Brain Clean-Room Architecture (Google DeepMind CaMeL / Simon Willison Pattern) + On-Chain Probe.
+ *
+ * - Brain 1 (Worker in the Wild): Reads untrusted external text (invoice, webpage, A2A x402 response)
+ *   and extracts a candidate transaction.
+ * - The Glass Wall: Strips all untrusted natural language prose; only typed numbers & IDs cross.
+ * - On-Chain Truth Probe: Attaches cold NEAR facts (account age, code_hash, blocklist, TokenDiff collar).
+ * - Brain 2 (Clean-Room Conscience): Sees ONLY the human's Mission + bare numbers + cold facts.
+ */
+export async function evaluateDualBrainPipeline({
+  kernel,
+  agentId,
+  untrustedExternalText = "",
+  proposedTx = {},
+  humanApprovedOverride = false,
+}) {
+  const agent = kernel.getAgentLedger(agentId);
+  if (!agent) {
+    throw new Error(`AGENT_NOT_REGISTERED: ${agentId}`);
+  }
+
+  // 1. BRAIN 1 (Worker in the Wild): Parses external input into a structured proposal
+  const extracted = extractProposalFromUntrustedText(untrustedExternalText, {
+    agentId,
+    fallbackNonce: agent.lastNonce + 1,
+  });
+  const injectionDetectedInRawText = extracted.injectionDetectedInRawText;
+
+  const brain1RawProposal = {
+    receiverId: proposedTx.counterpartyId || extracted.counterpartyId,
+    amountIn: String(proposedTx.amount ?? extracted.amount),
+    tokenIn: proposedTx.tokenIn || extracted.tokenIn,
+    tokenOut: proposedTx.tokenOut || extracted.tokenOut,
+    amountOut: String(proposedTx.amountOut ?? proposedTx.amount ?? extracted.amountOut),
+    targetChain: proposedTx.chain || extracted.chain,
+    nonce: Number(proposedTx.nonce ?? extracted.nonce),
+    untrustedReasoningFromWeb:
+      untrustedExternalText || "Standard cross-chain intent execution request",
+  };
+
+  // 2. THE GLASS WALL: Strip all untrusted text so Brain 2 cannot be hypnotized
+  const glassWallStripped = Object.freeze({
+    receiverId: String(brain1RawProposal.receiverId).replace(/[^a-zA-Z0-9._-]/g, ""),
+    amountIn: String(brain1RawProposal.amountIn).replace(/[^0-9]/g, ""),
+    tokenIn: String(brain1RawProposal.tokenIn),
+    tokenOut: String(brain1RawProposal.tokenOut),
+    amountOut: String(brain1RawProposal.amountOut).replace(/[^0-9]/g, ""),
+    targetChain: String(brain1RawProposal.targetChain),
+    nonce: Number(brain1RawProposal.nonce),
+    strippedBytesCount: Buffer.byteLength(brain1RawProposal.untrustedReasoningFromWeb, "utf8"),
+  });
+
+  // 3. ON-CHAIN TRUTH PROBE: Cold facts from NEAR RPC + Emet Counterparty Registry
+  const rpcFacts = await probeNearAccountLive(glassWallStripped.receiverId);
+  const cpEvaluation = kernel.evaluateCounterparty(glassWallStripped.receiverId);
+
+  // 4. BRAIN 2 (Clean-Room Conscience): Compares Owner Mission vs. Stripped Proposal + Cold Facts
+  const reasons = [];
+  let verdict = "ALLOW";
+
+  // Check A: Counterparty blocklist
+  if (cpEvaluation.decision === "BLOCK") {
+    verdict = "BLOCK";
+    reasons.push(`Counterparty blocked: ${cpEvaluation.reason}`);
+  }
+
+  // Check B: TokenDiff / SCAMCOIN asset check
+  if (
+    agent.allowedTokens.length > 0 &&
+    !agent.allowedTokens.includes(glassWallStripped.tokenOut)
+  ) {
+    verdict = "BLOCK";
+    reasons.push(
+      `Mission Asset Violation: Output token '${glassWallStripped.tokenOut}' is not in allowed Mission tokens [${agent.allowedTokens.join(", ")}]`
+    );
+  }
+
+  // Check C: Price collar / One-way drain check (fixes OutLayer §11 & x402 blind signing)
+  const inBig = BigInt(glassWallStripped.amountIn || "0");
+  const outBig = BigInt(glassWallStripped.amountOut || "0");
+  const minExpectedOut = (inBig * BigInt(agent.minReturnBps)) / 10000n;
+  if (outBig < minExpectedOut) {
+    verdict = "BLOCK";
+    reasons.push(
+      `One-Way Drain / Slippage Violation: Receives ${outBig} (${glassWallStripped.tokenOut}) for ${inBig} (${glassWallStripped.tokenIn}), below Mission collar ${minExpectedOut} (${agent.minReturnBps} bps)`
+    );
+  }
+
+  // Check D: Per-Tx and 24h Epoch Spend Caps
+  if (inBig > BigInt(agent.maxPerTx)) {
+    verdict = "BLOCK";
+    reasons.push(
+      `Exceeds Mission max_per_tx (${inBig} > ${agent.maxPerTx})`
+    );
+  }
+  if (BigInt(agent.currentEpochExposure) + inBig > BigInt(agent.epochSpendCap)) {
+    verdict = "BLOCK";
+    reasons.push(
+      `Exceeds 24h Mission epoch_spend_cap (${BigInt(agent.currentEpochExposure) + inBig} > ${agent.epochSpendCap})`
+    );
+  }
+
+  // Check E: Monotonic Nonce (Anti-runaway retry loop)
+  if (glassWallStripped.nonce <= agent.lastNonce) {
+    verdict = "BLOCK";
+    reasons.push(
+      `Non-monotonic nonce (${glassWallStripped.nonce} <= ${agent.lastNonce}): Stalled relayer retry loop blocked`
+    );
+  }
+
+  // Check F: Counterparty WARN / Unknown / Recently Modified Contract WASM -> OutLayer tasks::confirm
+  if (verdict !== "BLOCK") {
+    const notInExplicitAllowlist =
+      agent.allowedCounterparties.length > 0 &&
+      !agent.allowedCounterparties.includes(glassWallStripped.receiverId);
+
+    if (cpEvaluation.decision === "WARN" || notInExplicitAllowlist) {
+      if (humanApprovedOverride) {
+        verdict = "ALLOW";
+        reasons.push(
+          `Human owner signed OutLayer tasks::confirm override for '${glassWallStripped.receiverId}'`
+        );
+      } else {
+        verdict = "WARN";
+        reasons.push(
+          cpEvaluation.decision === "WARN"
+            ? cpEvaluation.reason
+            : `Receiver '${glassWallStripped.receiverId}' is not in pre-approved allowlist — pausing for human confirmation`
+        );
+      }
+    }
+  }
+
+  if (verdict === "ALLOW" && reasons.length === 0) {
+    reasons.push(
+      `Clean-Room Brain 2 verified: matches Mission (${agent.minReturnBps} bps collar), verified counterparty (${cpEvaluation.reason})`
+    );
+  }
+
+  const outlayerTask =
+    verdict === "WARN"
+      ? {
+          status: "awaiting_owner",
+          taskId: `task-${crypto.randomBytes(4).toString("hex")}`,
+          protocol: "outlayer::tasks::confirm",
+          title: `Approve payment of ${(Number(inBig) / 1e6).toFixed(2)} USDC to ${glassWallStripped.receiverId}?`,
+          fields: {
+            To: glassWallStripped.receiverId,
+            AmountIn: `${(Number(inBig) / 1e6).toFixed(2)} (${glassWallStripped.tokenIn})`,
+            ExpectedReturn: `${(Number(outBig) / 1e6).toFixed(2)} (${glassWallStripped.tokenOut})`,
+            ContractCodeHash: rpcFacts.codeHash,
+            WarningReason: reasons.join("; "),
+          },
+        }
+      : null;
+
+  return {
+    agentId,
+    missionGoal: agent.missionGoal,
+    brain1Worker: {
+      hadPromptInjectionInInput: injectionDetectedInRawText,
+      rawProposal: brain1RawProposal,
+    },
+    glassWall: {
+      textStrippedBytes: glassWallStripped.strippedBytesCount,
+      passedToBrain2: glassWallStripped,
+    },
+    onChainProbe: {
+      rpcFacts,
+      counterpartyVerdict: cpEvaluation,
+    },
+    brain2Conscience: {
+      verdict,
+      reasons,
+      outlayerTask,
+    },
+  };
 }
 
 /**
@@ -660,6 +1095,22 @@ export function createEmetMcpTools(kernel) {
         required: ["agentId"],
       },
       handler: async ({ agentId }) => kernel.getAgentLedger(agentId),
+    },
+    {
+      name: "emet_dual_brain_check",
+      description:
+        "Runs the Two-Brain Clean-Room check (Worker -> Glass Wall -> On-Chain Probe -> Clean-Room Conscience) before signing any intent or x402 payment.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          agentId: { type: "string" },
+          untrustedExternalText: { type: "string" },
+          proposedTx: { type: "object" },
+        },
+        required: ["agentId", "proposedTx"],
+      },
+      handler: async ({ agentId, untrustedExternalText, proposedTx }) =>
+        evaluateDualBrainPipeline({ kernel, agentId, untrustedExternalText, proposedTx }),
     },
   ];
 }
