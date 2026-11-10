@@ -154,7 +154,7 @@ npm run submit:preview
 
 Remove NEAR from this design and all three safety guarantees break:
 
-| NEAR Primitive Used | Why Off-Chain Wrappers or Standard EVM EOAs Cannot Replicate It |
+| NEAR Mechanism Used | Why Off-Chain Wrappers or Standard EVM EOAs Cannot Replicate It |
 | :--- | :--- |
 | **Native `FunctionCall` Access Keys** | Protocol-enforced key scoping locks the agent's signing key to `emet-v2-mwab6fsl.testnet::initiate_intent` with a `1.50 NEAR` gas ceiling. Even if an attacker steals the agent process memory, that key cannot call `Transfer`, `AddKey`, or `DeployContract`. |
 | **Account `code_hash` Inspection via RPC** | Brain 2 queries `view_account` on NEAR before signing to detect whether a receiver has deployed or recently swapped contract WASM, pausing unfamiliar contracts for owner confirmation. |

@@ -167,6 +167,13 @@ export function createEmetRequestHandler({
       return;
     }
 
+    // King's Court Rule 8.11: Adversarial Honeypot Ingress (/rob)
+    if (method === "GET" && pathname === "/rob") {
+      res.writeHead(302, { Location: "/cockpit#break" });
+      res.end();
+      return;
+    }
+
     // Published contract binary, re-hashed by the browser on /cockpit#verify
     if (method === "GET" && pathname === "/emet_settlement_contract.wasm") {
       const wasmPath = path.resolve(__dirname, "../../../artifacts/emet_settlement_contract.wasm");

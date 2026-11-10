@@ -1,0 +1,74 @@
+{
+  "verifiedAtIso": "2026-11-10T14:08:42.009Z",
+  "network": "near-testnet",
+  "contractId": "emet-v2-mwab6fsl.testnet",
+  "codeHash": "DgkPe1dqrknBUo4VWQMxCHAq7JDF3WHhUcRkRAv7w5kb",
+  "blockHeight": 277077666,
+  "totalTransactionsAudited": 9,
+  "matchingTransactions": 9,
+  "transactions": [
+    {
+      "key": "deployAndInit",
+      "txHash": "3R2guw4GDoT2vuSPu7BoEZv3MeFNjDTRw9ph8ibmAdku",
+      "blockHash": "verified",
+      "status": "SUCCESS",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/3R2guw4GDoT2vuSPu7BoEZv3MeFNjDTRw9ph8ibmAdku"
+    },
+    {
+      "key": "registerAgentAndFunctionCallKey",
+      "txHash": "6TTPsB7fR7ebd83NXGWQ2r2rHVyWcBdeujdsJpQECD3S",
+      "blockHash": "verified",
+      "status": "SUCCESS",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/6TTPsB7fR7ebd83NXGWQ2r2rHVyWcBdeujdsJpQECD3S"
+    },
+    {
+      "key": "adversarialFullAccessKeyRejected",
+      "txHash": "A1G6NJXx1nq5dKN1PsSRPS1mGeGzKC26ut2CFmA4zoPX",
+      "blockHash": "verified",
+      "status": "REJECTED (ERR_FULL_ACCESS_KEY_FORBIDDEN)",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/A1G6NJXx1nq5dKN1PsSRPS1mGeGzKC26ut2CFmA4zoPX"
+    },
+    {
+      "key": "adversarialScamcoinSwapRejected",
+      "txHash": "DrcMVnrvZhw8Ehov3x7JDvyve9zSTco6K5XFm1X5YhyY",
+      "blockHash": "verified",
+      "status": "REJECTED (ERR_MISSION_ASSET_BLOCKED)",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/DrcMVnrvZhw8Ehov3x7JDvyve9zSTco6K5XFm1X5YhyY"
+    },
+    {
+      "key": "adversarialSlippageDrainRejected",
+      "txHash": "8iUMeLtjNdFpNH2nPBi5CDsSRCtTg8TNTjbb41BwuhiG",
+      "blockHash": "verified",
+      "status": "REJECTED (ERR_SLIPPAGE_COLLAR_VIOLATION)",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/8iUMeLtjNdFpNH2nPBi5CDsSRCtTg8TNTjbb41BwuhiG"
+    },
+    {
+      "key": "adversarialAgentMissionHijackRejected",
+      "txHash": "2uTMJzVuLQ4hUGdEVWVFLT4fGHU6Dak67HijWaisADwt",
+      "blockHash": "verified",
+      "status": "REJECTED (ERR_OWNER_KEY_REQUIRED)",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/2uTMJzVuLQ4hUGdEVWVFLT4fGHU6Dak67HijWaisADwt"
+    },
+    {
+      "key": "adversarialDuplicateNonceRejected",
+      "txHash": "Am3FRACf9UmW47m68PnvE2fzSxypNo1dMtpq6Yi5BgcU",
+      "blockHash": "verified",
+      "status": "REJECTED (ERR_NON_MONOTONIC_NONCE)",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/Am3FRACf9UmW47m68PnvE2fzSxypNo1dMtpq6Yi5BgcU"
+    },
+    {
+      "key": "crossContractMpcFailureAtomicRefund",
+      "txHash": "9MAZxcuYurVzPhr6Drwo5W4WqtZN7kW4CZz82wEUwyxa",
+      "blockHash": "verified",
+      "status": "SUCCESS",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/9MAZxcuYurVzPhr6Drwo5W4WqtZN7kW4CZz82wEUwyxa"
+    },
+    {
+      "key": "liveBnbFinalizedMpcVerification",
+      "txHash": "FaCMuGXzprkQrLFNKM4MZVeXyHApXK55jWfCMbvHKKte",
+      "blockHash": "verified",
+      "status": "SUCCESS",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/FaCMuGXzprkQrLFNKM4MZVeXyHApXK55jWfCMbvHKKte"
+    }
+  ]
+}

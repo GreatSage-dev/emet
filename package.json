@@ -9,6 +9,11 @@
     "url": "https://github.com/GreatSage-dev/emet.git"
   },
   "scripts": {
+    "verify": "npm test && node scripts/plain-words-check.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "check:words": "node scripts/plain-words-check.mjs",
+    "evidence": "node scripts/evidence.mjs",
+    "self-chaos": "node scripts/self-chaos.mjs",
     "build": "node scripts/build-static.mjs",
     "build:wasm": "cargo build --target wasm32-unknown-unknown --release",
     "test": "node --test packages/agent-gateway/tests/settlement.test.mjs",
