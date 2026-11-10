@@ -30,16 +30,18 @@ function createNearVmHost(getMemory) {
   const logs = [];
   let lastReturn = Buffer.alloc(0);
   const context = {
-    currentAccountId: "emet-v1-mw6z2crp.testnet",
-    signerAccountId: "emet-v1-mw6z2crp.testnet",
-    predecessorAccountId: "emet-v1-mw6z2crp.testnet",
+    currentAccountId: "emet-v2-mwab6fsl.testnet",
+    signerAccountId: "emet-v2-mwab6fsl.testnet",
+    predecessorAccountId: "emet-v2-mwab6fsl.testnet",
     signerAccountPk: Buffer.from("00" + "11".repeat(32), "hex"),
     input: JSON.stringify({
-      owner_id: "emet-v1-mw6z2crp.testnet",
+      owner_id: "emet-v2-mwab6fsl.testnet",
       mpc_signer_id: "v1.signer-prod.testnet",
     }),
     attachedDeposit: 0n,
     blockTimestampNs: 1794090000000000000n,
+    promiseResultStatus: 1n,
+    promiseResultPayload: "",
   };
 
   const readBytes = (ptr, len) =>
@@ -102,8 +104,11 @@ function createNearVmHost(getMemory) {
     promise_results_count() {
       return 1n;
     },
-    promise_result() {
-      return 1n;
+    promise_result(_idx, regId) {
+      if (context.promiseResultStatus === 1n && context.promiseResultPayload) {
+        registers.set(regId, Buffer.from(context.promiseResultPayload, "utf8"));
+      }
+      return context.promiseResultStatus;
     },
     promise_return() {},
     storage_write(kLen, kPtr, vLen, vPtr, regId) {
@@ -130,27 +135,259 @@ function createNearVmHost(getMemory) {
   };
 }
 
-describe("Compiled Rust Smart Contract (.wasm) In-VM Execution", () => {
-  it("instantiates emet_settlement_contract.wasm and passes all near/mpc + NEAR VM ABI assertions", async () => {
+describe("Compiled Rust Smart Contract (.wasm) In-VM & NEAR ABI Firewall", () => {
+  async function bootWasmContract() {
     assert.equal(fs.existsSync(wasmContractPath), true, "Compiled .wasm binary must exist");
     const wasmBytes = fs.readFileSync(wasmContractPath);
     let wasmInstance = null;
     const host = createNearVmHost(() => wasmInstance.exports.memory);
     const { instance } = await WebAssembly.instantiate(wasmBytes, { env: host.env });
     wasmInstance = instance;
+    return { instance, host };
+  }
 
-    const result = instance.exports.wasm_run_emet_verification_suite();
-    assert.equal(result, 1);
+  const OWNER_PK_HEX = "00" + "11".repeat(32);
+  const AGENT_PK_HEX = "00" + "22".repeat(32);
+  const STRANGER_PK_HEX = "00" + "33".repeat(32);
 
-    // Also exercise native NEAR VM contract exports (init + get_contract_info)
+  async function setupRegisteredWasmContract() {
+    const { instance, host } = await bootWasmContract();
+    host.context.signerAccountPk = Buffer.from(OWNER_PK_HEX, "hex");
+    instance.exports.init();
+
+    // Whitelist verified solver
+    host.context.attachedDeposit = 1n;
+    host.context.input = JSON.stringify({
+      receiver_id: "solver-prime.near",
+      account_age_days: 120,
+      is_contract: true,
+      code_changed_recently: false,
+      prior_successful_settlements: 12,
+    });
+    instance.exports.upsert_counterparty();
+
+    // Register agent vault with Mission allowlist & 10% slippage collar (9000 bps)
+    host.context.attachedDeposit = 500_000_000_000_000_000_000_000n;
+    host.context.input = JSON.stringify({
+      agent_id: "emet-v2-mwab6fsl.testnet",
+      authorized_pk_hex: AGENT_PK_HEX,
+      initial_budget: "500000000000000000000000",
+      max_per_tx: "300000000000000000000000",
+      epoch_spend_cap: "450000000000000000000000",
+      allowed_counterparties: "solver-prime.near",
+      allowed_output_tokens: "bnb:USDC,nep141:usdc.near,solana:USDC",
+      min_return_bps: 9000,
+    });
+    instance.exports.register_agent();
+    host.context.attachedDeposit = 0n;
+    return { instance, host };
+  }
+
+  it("passes internal Rust verification suite and initializes NEAR VM trie state cleanly", async () => {
+    const { instance, host } = await bootWasmContract();
+    assert.equal(instance.exports.wasm_run_emet_verification_suite(), 1);
     instance.exports.init();
     host.context.input = "{}";
     instance.exports.get_contract_info();
     const info = host.getReturnJson();
     assert.equal(info.initialized, true);
-    assert.equal(info.owner_id, "emet-v1-mw6z2crp.testnet");
+    assert.equal(info.owner_id, "emet-v2-mwab6fsl.testnet");
+    assert.equal(info.owner_pk_hex, OWNER_PK_HEX);
     assert.equal(info.mpc_signer_id, "v1.signer-prod.testnet");
     assert.equal(info.domain_id, 3);
+  });
+
+  it("enforces owner_pk_hex on update_mission and register_agent in compiled WASM VM", async () => {
+    const { instance, host } = await setupRegisteredWasmContract();
+
+    // Agent FunctionCall key cannot update its own mission limits
+    host.context.signerAccountPk = Buffer.from(AGENT_PK_HEX, "hex");
+    host.context.input = JSON.stringify({
+      agent_id: "emet-v2-mwab6fsl.testnet",
+      max_per_tx: "999000000000000000000000",
+    });
+    assert.throws(() => instance.exports.update_mission(), /ERR_OWNER_KEY_REQUIRED/);
+
+    // Stranger key cannot register or overwrite agents
+    host.context.signerAccountPk = Buffer.from(STRANGER_PK_HEX, "hex");
+    assert.throws(() => instance.exports.update_mission(), /ERR_OWNER_KEY_REQUIRED/);
+    assert.throws(() => instance.exports.register_agent(), /ERR_OWNER_KEY_REQUIRED/);
+
+    // Genuine Owner key succeeds
+    host.context.signerAccountPk = Buffer.from(OWNER_PK_HEX, "hex");
+    host.context.input = JSON.stringify({
+      agent_id: "emet-v2-mwab6fsl.testnet",
+      max_per_tx: "250000000000000000000000",
+      min_return_bps: 9200,
+    });
+    instance.exports.update_mission();
+    const updated = host.getReturnJson();
+    assert.equal(updated.max_per_tx, "250000000000000000000000");
+    assert.equal(updated.min_return_bps, 9200);
+  });
+
+  it("rejects FullAccess keys, SCAMCOIN swaps, 99% slippage drains, and unallowlisted vendors inside WASM", async () => {
+    const { instance, host } = await setupRegisteredWasmContract();
+
+    // 1. FullAccess key blocked
+    host.context.signerAccountPk = Buffer.from(OWNER_PK_HEX, "hex");
+    host.context.input = JSON.stringify({
+      intent_id: "i-full",
+      counterparty_id: "solver-prime.near",
+      amount: "100000000000000000000000",
+      amount_out: "100000000000000000000000",
+      token_out: "bnb:USDC",
+      nonce: 1,
+      chain: "Bnb",
+      dispatch_mpc: false,
+    });
+    assert.throws(() => instance.exports.initiate_intent(), /ERR_FULL_ACCESS_KEY_FORBIDDEN/);
+
+    // Switch to genuine scoped Agent FunctionCall PK
+    host.context.signerAccountPk = Buffer.from(AGENT_PK_HEX, "hex");
+
+    // 2. Unapproved token (SCAMCOIN) blocked on-chain
+    host.context.input = JSON.stringify({
+      intent_id: "i-scam",
+      counterparty_id: "solver-prime.near",
+      amount: "100000000000000000000000",
+      amount_out: "100000000000000000000000",
+      token_out: "nep141:scamcoin.near",
+      nonce: 1,
+      chain: "Bnb",
+      dispatch_mpc: false,
+    });
+    assert.throws(() => instance.exports.initiate_intent(), /ERR_MISSION_ASSET_BLOCKED/);
+
+    // 3. Omitting token_out when allowlist is active cannot bypass check
+    host.context.input = JSON.stringify({
+      intent_id: "i-omit-tok",
+      counterparty_id: "solver-prime.near",
+      amount: "100000000000000000000000",
+      amount_out: "100000000000000000000000",
+      nonce: 1,
+      chain: "Bnb",
+      dispatch_mpc: false,
+    });
+    assert.throws(() => instance.exports.initiate_intent(), /ERR_MISSION_ASSET_BLOCKED/);
+
+    // 4. 99% slippage drain blocked on-chain
+    host.context.input = JSON.stringify({
+      intent_id: "i-slip",
+      counterparty_id: "solver-prime.near",
+      amount: "100000000000000000000000",
+      amount_out: "1",
+      token_out: "bnb:USDC",
+      nonce: 1,
+      chain: "Bnb",
+      dispatch_mpc: false,
+    });
+    assert.throws(() => instance.exports.initiate_intent(), /ERR_SLIPPAGE_COLLAR_VIOLATION/);
+
+    // 5. Unknown counterparty blocked
+    host.context.input = JSON.stringify({
+      intent_id: "i-stranger",
+      counterparty_id: "drainer.near",
+      amount: "100000000000000000000000",
+      amount_out: "100000000000000000000000",
+      token_out: "bnb:USDC",
+      nonce: 1,
+      chain: "Bnb",
+      dispatch_mpc: false,
+    });
+    assert.throws(() => instance.exports.initiate_intent(), /ERR_COUNTERPARTY_WARN_PAUSE/);
+
+    // 6. Exceeds per-tx spend cap blocked
+    host.context.input = JSON.stringify({
+      intent_id: "i-cap",
+      counterparty_id: "solver-prime.near",
+      amount: "400000000000000000000000",
+      amount_out: "400000000000000000000000",
+      token_out: "bnb:USDC",
+      nonce: 1,
+      chain: "Bnb",
+      dispatch_mpc: false,
+    });
+    assert.throws(() => instance.exports.initiate_intent(), /ERR_EXCEEDS_MAX_PER_TX/);
+  });
+
+  it("enforces #[private] MPC callback, refunds 100% on failure, settles on hash match, and blocks duplicate nonces", async () => {
+    const { instance, host } = await setupRegisteredWasmContract();
+    host.context.signerAccountPk = Buffer.from(AGENT_PK_HEX, "hex");
+
+    // 1. Valid intent locks 0.15 NEAR
+    host.context.input = JSON.stringify({
+      intent_id: "wasm-refund-1",
+      counterparty_id: "solver-prime.near",
+      amount: "150000000000000000000000",
+      amount_out: "149000000000000000000000",
+      token_out: "bnb:USDC",
+      nonce: 1,
+      chain: "Bnb",
+      dispatch_mpc: false,
+    });
+    instance.exports.initiate_intent();
+    const lock1 = host.getReturnJson();
+    assert.equal(lock1.status, "VerifyingOutcome");
+
+    // Duplicate nonce 1 (even with fresh intent_id) immediately blocked on-chain
+    host.context.input = JSON.stringify({
+      intent_id: "wasm-retry-dup-1",
+      counterparty_id: "solver-prime.near",
+      amount: "150000000000000000000000",
+      amount_out: "149000000000000000000000",
+      token_out: "bnb:USDC",
+      nonce: 1,
+      chain: "Bnb",
+      dispatch_mpc: false,
+    });
+    assert.throws(() => instance.exports.initiate_intent(), /ERR_NON_MONOTONIC_NONCE/);
+
+    // Non-self attacker cannot invoke callback
+    host.context.predecessorAccountId = "attacker.near";
+    host.context.input = JSON.stringify({ intent_id: "wasm-refund-1" });
+    assert.throws(() => instance.exports.on_foreign_tx_verified(), /ERR_PRIVATE_CALLBACK_ONLY/);
+
+    // Genuine self callback with promise failure (status_code=0) atomically refunds 100%
+    host.context.predecessorAccountId = "emet-v2-mwab6fsl.testnet";
+    host.context.promiseResultStatus = 0n;
+    instance.exports.on_foreign_tx_verified();
+    const refundOut = host.getReturnJson();
+    assert.equal(refundOut.status.state, "Refunded");
+
+    // Re-intent nonce 2 with valid MPC hash settles cleanly
+    host.context.input = JSON.stringify({
+      intent_id: "wasm-settle-2",
+      counterparty_id: "solver-prime.near",
+      amount: "200000000000000000000000",
+      amount_out: "199500000000000000000000",
+      token_out: "bnb:USDC",
+      nonce: 2,
+      chain: "Bnb",
+      dispatch_mpc: false,
+    });
+    instance.exports.initiate_intent();
+    const lock2 = host.getReturnJson();
+
+    host.context.promiseResultStatus = 1n;
+    host.context.promiseResultPayload = JSON.stringify({
+      payload_hash: lock2.expected_payload_hash,
+      signature: { scheme: "Secp256k1" },
+    });
+    host.context.input = JSON.stringify({ intent_id: "wasm-settle-2" });
+    instance.exports.on_foreign_tx_verified();
+    const settleOut = host.getReturnJson();
+    assert.equal(settleOut.status.state, "Settled");
+
+    // Final double-entry conservation invariant
+    host.context.input = JSON.stringify({ agent_id: "emet-v2-mwab6fsl.testnet" });
+    instance.exports.get_agent_ledger();
+    const finalLedger = host.getReturnJson();
+    assert.equal(finalLedger.available_balance, "300000000000000000000000");
+    assert.equal(finalLedger.in_flight_locked, "0");
+    assert.equal(finalLedger.settled_spent, "200000000000000000000000");
+    assert.equal(finalLedger.refunded_saved, "150000000000000000000000");
+    assert.equal(finalLedger.last_nonce, 2);
   });
 });
 
@@ -608,13 +845,17 @@ describe("Emet Gateway HTTP Server & Ashborn Security Hardening (OWASP API)", ()
       assert.equal(freeformScamJson.trace.glassWall.passedToBrain2.amountIn, "50000000000");
       assert.equal(freeformScamJson.trace.glassWall.passedToBrain2.amountOut, "0");
 
-      // 10. Live NEAR Testnet Deployment Receipt endpoint returns verified emet-v1-mw6z2crp.testnet status
+      // 10. Live NEAR Testnet Deployment Receipt endpoint returns verified emet-v2-mwab6fsl.testnet status & all 9 on-chain receipts
       const testnetRes = await fetch(`${baseUrl}/api/testnet/status`);
       assert.equal(testnetRes.status, 200);
       const testnetJson = await testnetRes.json();
       assert.equal(testnetJson.deployed, true);
-      assert.equal(testnetJson.contractId, "emet-v1-mw6z2crp.testnet");
+      assert.equal(testnetJson.contractId, "emet-v2-mwab6fsl.testnet");
       assert.equal(testnetJson.mpcSignerContractId, "v1.signer-prod.testnet");
+      assert.equal(testnetJson.transactions.adversarialScamcoinSwapRejected.errorCode, "ERR_MISSION_ASSET_BLOCKED");
+      assert.equal(testnetJson.transactions.adversarialSlippageDrainRejected.errorCode, "ERR_SLIPPAGE_COLLAR_VIOLATION");
+      assert.equal(testnetJson.transactions.adversarialAgentMissionHijackRejected.errorCode, "ERR_OWNER_KEY_REQUIRED");
+      assert.equal(testnetJson.transactions.adversarialDuplicateNonceRejected.errorCode, "ERR_NON_MONOTONIC_NONCE");
 
       // 11. Vercel Serverless Entrypoint (api/index.mjs) handles pre-parsed req.body without hanging
       const { default: vercelHandler } = await import("../../../api/index.mjs");
