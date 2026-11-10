@@ -5,7 +5,11 @@
  */
 import crypto from "node:crypto";
 
-export const DEFAULT_NEAR_TESTNET_RPC = "https://rpc.testnet.near.org";
+export const DEFAULT_NEAR_TESTNET_RPC = "https://test.rpc.fastnear.com";
+const FALLBACK_NEAR_TESTNET_RPCS = [
+  "https://test.rpc.fastnear.com",
+  "https://rpc.testnet.near.org",
+];
 const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 export function base58Encode(buf) {
@@ -155,25 +159,33 @@ export const NearActions = {
 };
 
 export async function nearRpc(method, params, rpcUrl = DEFAULT_NEAR_TESTNET_RPC, timeoutMs = 45_000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: "emet-rpc", method, params }),
-      signal: controller.signal,
-    });
-    const json = await res.json();
-    if (json.error) {
-      const err = new Error(`NEAR_RPC_ERROR: ${JSON.stringify(json.error)}`);
-      err.rpcError = json.error;
-      throw err;
+  const endpoints = rpcUrl === DEFAULT_NEAR_TESTNET_RPC ? FALLBACK_NEAR_TESTNET_RPCS : [rpcUrl];
+  let lastErr = null;
+  for (const endpoint of endpoints) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "emet-rpc", method, params }),
+        signal: controller.signal,
+      });
+      const json = await res.json();
+      if (json.error) {
+        const err = new Error(`NEAR_RPC_ERROR (${endpoint}): ${JSON.stringify(json.error)}`);
+        err.rpcError = json.error;
+        throw err;
+      }
+      return json.result;
+    } catch (err) {
+      lastErr = err;
+      if (err.rpcError) throw err;
+    } finally {
+      clearTimeout(timer);
     }
-    return json.result;
-  } finally {
-    clearTimeout(timer);
   }
+  throw lastErr;
 }
 
 export async function getAccessKeyNonceAndBlockHash(accountId, publicKey, rpcUrl = DEFAULT_NEAR_TESTNET_RPC) {
@@ -224,6 +236,7 @@ export async function signAndSendNearTransaction({
   const sigBytes = crypto.sign(null, txHash, privKeyObj);
 
   const signedTxBytes = Buffer.concat([txBytes, Buffer.from([0]), sigBytes]);
+  const txHashB58 = base58Encode(txHash);
   const outcome = await nearRpc(
     "send_tx",
     {
@@ -231,11 +244,21 @@ export async function signAndSendNearTransaction({
       wait_until: waitUntil,
     },
     rpcUrl,
-    90_000
-  );
+    60_000
+  ).catch(async (err) => {
+    if (err.rpcError) throw err;
+    // If gateway timed out waiting for finality, poll `EXPERIMENTAL_tx_status`
+    await new Promise((r) => setTimeout(r, 4000));
+    return nearRpc(
+      "EXPERIMENTAL_tx_status",
+      { tx_hash: txHashB58, sender_account_id: signerId, wait_until: "FINAL" },
+      rpcUrl,
+      30_000
+    );
+  });
 
   return {
-    txHash: outcome.transaction?.hash || base58Encode(txHash),
+    txHash: outcome.transaction?.hash || txHashB58,
     status: outcome.status,
     outcome,
   };

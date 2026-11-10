@@ -1,45 +1,72 @@
 {
   "network": "testnet",
-  "rpcUrl": "https://rpc.testnet.near.org",
-  "contractId": "emet-v1-mw6z2crp.testnet",
-  "codeHash": "3FuGj5yFKe3tqf2AtzbjLV1X678bSKzfR7jQ7HJaeya4",
-  "deployedAtIso": "2026-11-07T22:27:09.769Z",
+  "rpcUrl": "https://test.rpc.fastnear.com",
+  "contractId": "emet-v2-mwab6fsl.testnet",
+  "codeHash": "CxYkUVjYqvxU3fyf8pk129cgxioCtFBH1NRCXZmeUjrF",
+  "deployedAtIso": "2026-11-10T06:34:00.744Z",
   "mpcSignerContractId": "v1.signer-prod.testnet",
   "mpcSignerVersion": "3.18.0",
   "mpcForeignTxDomainId": 3,
-  "ownerPublicKey": "ed25519:HbT4ab5cGmeZKMKrpfDWpKTq47siVDczsuAGnWqWaYFd",
-  "ownerBorshPkHex": "00f68e34d67fc94a5a7ab34fab69331521839dcab6305a37ebbe656abdb2021964",
-  "scopedAgentFunctionCallPublicKey": "ed25519:ETitme5BKyNAb9kK77rPqjKDddFeeATfEij3PzXhwXHv",
-  "scopedAgentBorshPkHex": "00c800662ffd69e9c0fbc1301efef634559fa99fd17b4212522bc97052baeac2fd",
-  "explorerAccountUrl": "https://testnet.nearblocks.io/address/emet-v1-mw6z2crp.testnet",
+  "ownerPublicKey": "ed25519:4tTGcUPYow1D9MqPqzU2CKkLvxQyazfpB7Az44z7G1sm",
+  "ownerBorshPkHex": "0039c1627a823505d1a8b3f2495e309610c8612dab2f9b84e38666be9a9e062018",
+  "scopedAgentFunctionCallPublicKey": "ed25519:8AjFw9dopbowT2KpoN7v2qJG7KBcoGc7aUa7LGsVyBTQ",
+  "scopedAgentBorshPkHex": "006a7fd102a275ac04ebf0510a32c05d444521d4e61e6d79c325e8b7d03bf08263",
+  "explorerAccountUrl": "https://testnet.nearblocks.io/address/emet-v2-mwab6fsl.testnet",
   "transactions": {
     "deployAndInit": {
-      "txHash": "FLV6hg98dgz5Fr1SFSASkRbD5mCjpzPoGm6DtQ2YGvs6",
-      "explorerUrl": "https://testnet.nearblocks.io/txns/FLV6hg98dgz5Fr1SFSASkRbD5mCjpzPoGm6DtQ2YGvs6"
+      "txHash": "3R2guw4GDoT2vuSPu7BoEZv3MeFNjDTRw9ph8ibmAdku",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/3R2guw4GDoT2vuSPu7BoEZv3MeFNjDTRw9ph8ibmAdku"
     },
     "registerAgentAndFunctionCallKey": {
-      "txHash": "C8uotjdyR67RKjHW7TuYq3sReWJ47SAo64DVdj354pEX",
-      "explorerUrl": "https://testnet.nearblocks.io/txns/C8uotjdyR67RKjHW7TuYq3sReWJ47SAo64DVdj354pEX"
+      "txHash": "6TTPsB7fR7ebd83NXGWQ2r2rHVyWcBdeujdsJpQECD3S",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/6TTPsB7fR7ebd83NXGWQ2r2rHVyWcBdeujdsJpQECD3S"
     },
     "adversarialFullAccessKeyRejected": {
-      "txHash": "3GULCtCNgWaeqbDUipNjZLxYsRpG1VWenTg35yEeYeev",
-      "explorerUrl": "https://testnet.nearblocks.io/txns/3GULCtCNgWaeqbDUipNjZLxYsRpG1VWenTg35yEeYeev"
+      "txHash": "A1G6NJXx1nq5dKN1PsSRPS1mGeGzKC26ut2CFmA4zoPX",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/A1G6NJXx1nq5dKN1PsSRPS1mGeGzKC26ut2CFmA4zoPX",
+      "errorCode": "ERR_FULL_ACCESS_KEY_FORBIDDEN",
+      "detail": "{\"ActionError\":{\"index\":0,\"kind\":{\"FunctionCallError\":{\"ExecutionError\":\"Smart contract panicked: ERR_FULL_ACCESS_KEY_FORBIDDEN: Autonomous agents must use scoped FunctionCall keys\"}}}}"
+    },
+    "adversarialScamcoinSwapRejected": {
+      "txHash": "DrcMVnrvZhw8Ehov3x7JDvyve9zSTco6K5XFm1X5YhyY",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/DrcMVnrvZhw8Ehov3x7JDvyve9zSTco6K5XFm1X5YhyY",
+      "errorCode": "ERR_MISSION_ASSET_BLOCKED",
+      "detail": "{\"ActionError\":{\"index\":0,\"kind\":{\"FunctionCallError\":{\"ExecutionError\":\"Smart contract panicked: ERR_MISSION_ASSET_BLOCKED: Output token 'nep141:scamcoin.near' rejected by on-chain Mission allowlist\"}}}}"
+    },
+    "adversarialSlippageDrainRejected": {
+      "txHash": "8iUMeLtjNdFpNH2nPBi5CDsSRCtTg8TNTjbb41BwuhiG",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/8iUMeLtjNdFpNH2nPBi5CDsSRCtTg8TNTjbb41BwuhiG",
+      "errorCode": "ERR_SLIPPAGE_COLLAR_VIOLATION",
+      "detail": "{\"ActionError\":{\"index\":0,\"kind\":{\"FunctionCallError\":{\"ExecutionError\":\"Smart contract panicked: ERR_SLIPPAGE_COLLAR_VIOLATION: Expected >= 90000000000000000000000 out, got 1\"}}}}"
+    },
+    "adversarialAgentMissionHijackRejected": {
+      "txHash": "2uTMJzVuLQ4hUGdEVWVFLT4fGHU6Dak67HijWaisADwt",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/2uTMJzVuLQ4hUGdEVWVFLT4fGHU6Dak67HijWaisADwt",
+      "errorCode": "ERR_OWNER_KEY_REQUIRED",
+      "detail": "{\"ActionError\":{\"index\":0,\"kind\":{\"FunctionCallError\":{\"ExecutionError\":\"Smart contract panicked: ERR_OWNER_KEY_REQUIRED: Agent FunctionCall keys or non-owners cannot modify Mission spending rules\"}}}}"
+    },
+    "adversarialDuplicateNonceRejected": {
+      "txHash": "Am3FRACf9UmW47m68PnvE2fzSxypNo1dMtpq6Yi5BgcU",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/Am3FRACf9UmW47m68PnvE2fzSxypNo1dMtpq6Yi5BgcU",
+      "errorCode": "ERR_NON_MONOTONIC_NONCE",
+      "detail": "{\"ActionError\":{\"index\":0,\"kind\":{\"FunctionCallError\":{\"ExecutionError\":\"Smart contract panicked: ERR_NON_MONOTONIC_NONCE: 2 <= 2\"}}}}"
     },
     "crossContractMpcFailureAtomicRefund": {
-      "txHash": "3ugCAzrDSX8dp5Tjb4h1BsGm3gMZLJjh9YnL9MixQstF",
-      "explorerUrl": "https://testnet.nearblocks.io/txns/3ugCAzrDSX8dp5Tjb4h1BsGm3gMZLJjh9YnL9MixQstF"
+      "txHash": "9MAZxcuYurVzPhr6Drwo5W4WqtZN7kW4CZz82wEUwyxa",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/9MAZxcuYurVzPhr6Drwo5W4WqtZN7kW4CZz82wEUwyxa"
     },
     "liveBnbFinalizedMpcVerification": {
-      "txHash": "7zAvP3HhLVr4FsqbJ8LtzwhjZyjmggJQsR8JZaYmCPUX",
-      "explorerUrl": "https://testnet.nearblocks.io/txns/7zAvP3HhLVr4FsqbJ8LtzwhjZyjmggJQsR8JZaYmCPUX",
-      "bnbTestnetBlockNumber": 141421132,
-      "bnbTestnetTxIdHex": "642441b3f1bebd9951b09e3fdedee8e03c304e48a1cca726039cfecea9082a05"
+      "txHash": "FaCMuGXzprkQrLFNKM4MZVeXyHApXK55jWfCMbvHKKte",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/FaCMuGXzprkQrLFNKM4MZVeXyHApXK55jWfCMbvHKKte",
+      "bnbTestnetBlockNumber": 141870103,
+      "bnbTestnetTxIdHex": "0e56a985b40ca301331be599c04ba5a68e6961b17136b1b9d9ce9c36d5142d14"
     }
   },
   "verifiedOnChainState": {
     "contractInfo": {
       "initialized": true,
-      "owner_id": "emet-v1-mw6z2crp.testnet",
+      "owner_id": "emet-v2-mwab6fsl.testnet",
+      "owner_pk_hex": "0039c1627a823505d1a8b3f2495e309610c8612dab2f9b84e38666be9a9e062018",
       "mpc_signer_id": "v1.signer-prod.testnet",
       "domain_id": 3,
       "agent_count": 1,
@@ -47,8 +74,8 @@
       "receipt_count": 2
     },
     "agentLedger": {
-      "agent_id": "emet-v1-mw6z2crp.testnet",
-      "owner_id": "emet-v1-mw6z2crp.testnet",
+      "agent_id": "emet-v2-mwab6fsl.testnet",
+      "owner_id": "emet-v2-mwab6fsl.testnet",
       "available_balance": "300000000000000000000000",
       "in_flight_locked": "0",
       "settled_spent": "200000000000000000000000",
@@ -56,15 +83,21 @@
       "max_per_tx": "300000000000000000000000",
       "epoch_spend_cap": "450000000000000000000000",
       "current_epoch_exposure": "200000000000000000000000",
+      "min_return_bps": 9000,
       "last_nonce": 2,
-      "authorized_pk_hex": "00c800662ffd69e9c0fbc1301efef634559fa99fd17b4212522bc97052baeac2fd",
+      "authorized_pk_hex": "006a7fd102a275ac04ebf0510a32c05d444521d4e61e6d79c325e8b7d03bf08263",
       "allowed_counterparties": [
         "solver-prime.near"
+      ],
+      "allowed_output_tokens": [
+        "bnb:USDC",
+        "nep141:usdc.near",
+        "solana:USDC"
       ]
     },
     "ghostIntent": {
       "intent_id": "intent-ghost-refund-01",
-      "agent_id": "emet-v1-mw6z2crp.testnet",
+      "agent_id": "emet-v2-mwab6fsl.testnet",
       "counterparty_id": "solver-prime.near",
       "amount": "150000000000000000000000",
       "nonce": 1,
@@ -72,23 +105,23 @@
       "expected_payload_hash": "2ab97999d1e015730271c7d6cbb298af76fd1de7af81926b42a8877bc4f5794e",
       "status": {
         "state": "Refunded",
-        "refunded_at_ms": 1794090384932,
+        "refunded_at_ms": 1794292425294,
         "reason": "Foreign chain transaction reverted (TransactionFailed) — ghost deposit blocked"
       }
     },
     "bnbIntent": {
       "intent_id": "intent-bnb-finalized-02",
-      "agent_id": "emet-v1-mw6z2crp.testnet",
+      "agent_id": "emet-v2-mwab6fsl.testnet",
       "counterparty_id": "solver-prime.near",
       "amount": "200000000000000000000000",
       "nonce": 2,
       "chain": "bnb",
-      "expected_payload_hash": "9a97f0116568c62c8f8cd447215848fb42c6758ec0ce6857947fe01d4e55cf49",
+      "expected_payload_hash": "dc443d1d59f90631cf540a903275829b474a0a244ca74c4ef65d55a391de7c32",
       "status": {
         "state": "Settled",
-        "verified_at_ms": 1794090402746,
-        "mpc_payload_hash": "9a97f0116568c62c8f8cd447215848fb42c6758ec0ce6857947fe01d4e55cf49",
-        "mpc_signature": "{\"payload_hash\":\"9a97f0116568c62c8f8cd447215848fb42c6758ec0ce6857947fe01d4e55cf49\",\"signature\":{\"scheme\":\"Secp256k1\",\"big_r\":{\"affine_point\":\"03b4b28bf1ff43e81e38bf3596b6a7ffac3027e2953172aafe4b0f872a1e107720\"},\"s\":{\"scalar\":\"79b3942cc153adb005370230407229cb8384bc8b58877db0058c7af929d2a5ff\"},\"recovery_id\":1}}"
+        "verified_at_ms": 1794292434691,
+        "mpc_payload_hash": "dc443d1d59f90631cf540a903275829b474a0a244ca74c4ef65d55a391de7c32",
+        "mpc_signature": "{\"payload_hash\":\"dc443d1d59f90631cf540a903275829b474a0a244ca74c4ef65d55a391de7c32\",\"signature\":{\"scheme\":\"Secp256k1\",\"big_r\":{\"affine_point\":\"02e7de4c4dff0de67fc66accda024e7cbd54c5cb3ccd5391eed0d944a2298fec0f\"},\"s\":{\"scalar\":\"005ed1fc53cb192a73855ed178f4fd39e4162043b1c4cfc08ce1baffdc786a80\"},\"recovery_id\":1}}"
       }
     }
   }

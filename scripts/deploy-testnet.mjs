@@ -31,7 +31,7 @@ async function ensureFundedTestnetAccount() {
   fs.mkdirSync(credsDir, { recursive: true });
   const existing = fs
     .readdirSync(credsDir)
-    .filter((f) => f.startsWith("emet-v1-") && f.endsWith(".testnet.json"));
+    .filter((f) => f.startsWith("emet-v2-") && f.endsWith(".testnet.json"));
 
   if (existing.length > 0) {
     const cred = JSON.parse(fs.readFileSync(path.join(credsDir, existing[0]), "utf8"));
@@ -40,14 +40,14 @@ async function ensureFundedTestnetAccount() {
       finality: "final",
       account_id: cred.account_id,
     }).catch(() => null);
-    // Reuse only if contract is not yet initialized so reruns are idempotent or fresh
+    // Reuse only if contract is not yet initialized so reruns are clean
     if (acct && acct.code_hash === "11111111111111111111111111111111") {
       return cred;
     }
   }
 
   const kp = generateNearKeyPair();
-  const accountId = `emet-v1-${Date.now().toString(36)}.testnet`;
+  const accountId = `emet-v2-${Date.now().toString(36)}.testnet`;
   const r = await fetch("https://helper.testnet.near.org/account", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -186,7 +186,7 @@ async function main() {
       }),
       NearActions.addFunctionCallKey({
         publicKey: agentKey.publicKey,
-        allowanceYocto: 600_000_000_000_000_000_000_000n, // 0.60 NEAR gas ceiling (covers pessimistic 220 Tgas x2 reservation)
+        allowanceYocto: 1_500_000_000_000_000_000_000_000n, // 1.50 NEAR gas ceiling (allows multiple proof & MPC calls)
         receiverId: contractId,
         methodNames: ["initiate_intent"],
       }),
@@ -199,6 +199,8 @@ async function main() {
           max_per_tx: "300000000000000000000000",     // 0.30 NEAR max per tx
           epoch_spend_cap: "450000000000000000000000",// 0.45 NEAR daily cap
           allowed_counterparties: "solver-prime.near",
+          allowed_output_tokens: "nep141:usdc.near,solana:USDC,bnb:USDC",
+          min_return_bps: 9000, // On-chain 10% max slippage collar (>= 90% returned)
         },
         gas: 50_000_000_000_000n,
         deposit: 500_000_000_000_000_000_000_000n,
@@ -207,7 +209,24 @@ async function main() {
   });
   console.log("2. Scoped FunctionCall Key + register_agent tx:", setupAgentTx.txHash, summarizeStatus(setupAgentTx.status));
 
-  // 3. Adversarial On-Chain Proof: Calling `initiate_intent` with FullAccess key is REJECTED by contract
+  // Add a separate non-owner key allowed to touch `update_mission` ONLY so we prove the contract's `ERR_OWNER_KEY_REQUIRED` guard live on NearBlocks too
+  const rogueOperatorKey = generateNearKeyPair();
+  await signAndSendNearTransaction({
+    signerId: contractId,
+    signerPublicKey: ownerCred.public_key,
+    signerPrivateKey: ownerCred.private_key,
+    receiverId: contractId,
+    actions: [
+      NearActions.addFunctionCallKey({
+        publicKey: rogueOperatorKey.publicKey,
+        allowanceYocto: 250_000_000_000_000_000_000_000n,
+        receiverId: contractId,
+        methodNames: ["update_mission"],
+      }),
+    ],
+  });
+
+  // 3. Adversarial Proof: FullAccess key rejected by contract (`ERR_FULL_ACCESS_KEY_FORBIDDEN`)
   const fullAccessAttemptTx = await signAndSendNearTransaction({
     signerId: contractId,
     signerPublicKey: ownerCred.public_key,
@@ -220,6 +239,8 @@ async function main() {
           intent_id: "intent-fullaccess-rejected",
           counterparty_id: "solver-prime.near",
           amount: "50000000000000000000000",
+          amount_out: "50000000000000000000000",
+          token_out: "bnb:USDC",
           nonce: 1,
           chain: "Bnb",
           dispatch_mpc: false,
@@ -229,9 +250,87 @@ async function main() {
       }),
     ],
   });
-  console.log("3. Adversarial FullAccess key rejection tx:", fullAccessAttemptTx.txHash, summarizeStatus(fullAccessAttemptTx.status));
+  const fullAccessStatus = summarizeStatus(fullAccessAttemptTx.status);
+  console.log("3. FullAccess key rejected tx:", fullAccessAttemptTx.txHash, fullAccessStatus);
 
-  // 4. Live Cross-Contract MPC Failure & Atomic Snapback Refund (`v1.signer-prod.testnet` rejects -> `#[private] on_foreign_tx_verified` refunds 100%)
+  // 4. Adversarial Proof: Compromised agent bypasses UI and tries swapping into SCAMCOIN on-chain (`ERR_MISSION_ASSET_BLOCKED`)
+  const scamcoinAttemptTx = await signAndSendNearTransaction({
+    signerId: contractId,
+    signerPublicKey: agentKey.publicKey,
+    signerPrivateKey: agentKey.privateKey,
+    receiverId: contractId,
+    actions: [
+      NearActions.functionCall({
+        methodName: "initiate_intent",
+        args: {
+          intent_id: "intent-scamcoin-rejected",
+          counterparty_id: "solver-prime.near",
+          amount: "100000000000000000000000",
+          amount_out: "100000000000000000000000",
+          token_out: "nep141:scamcoin.near",
+          nonce: 1,
+          chain: "Bnb",
+          dispatch_mpc: false,
+        },
+        gas: 50_000_000_000_000n,
+        deposit: 0n,
+      }),
+    ],
+  });
+  const scamcoinStatus = summarizeStatus(scamcoinAttemptTx.status);
+  console.log("4. SCAMCOIN on-chain firewall rejected tx:", scamcoinAttemptTx.txHash, scamcoinStatus);
+
+  // 5. Adversarial Proof: 99% slippage / zero-return drain (`amount_out: 1`) rejected on-chain (`ERR_SLIPPAGE_COLLAR_VIOLATION`)
+  const slippageDrainTx = await signAndSendNearTransaction({
+    signerId: contractId,
+    signerPublicKey: agentKey.publicKey,
+    signerPrivateKey: agentKey.privateKey,
+    receiverId: contractId,
+    actions: [
+      NearActions.functionCall({
+        methodName: "initiate_intent",
+        args: {
+          intent_id: "intent-slippage-rejected",
+          counterparty_id: "solver-prime.near",
+          amount: "100000000000000000000000",
+          amount_out: "1",
+          token_out: "bnb:USDC",
+          nonce: 1,
+          chain: "Bnb",
+          dispatch_mpc: false,
+        },
+        gas: 50_000_000_000_000n,
+        deposit: 0n,
+      }),
+    ],
+  });
+  const slippageStatus = summarizeStatus(slippageDrainTx.status);
+  console.log("5. 99% slippage drain on-chain rejected tx:", slippageDrainTx.txHash, slippageStatus);
+
+  // 6. Adversarial Proof: Rogue non-owner key tries rewriting Mission limits (`ERR_OWNER_KEY_REQUIRED`)
+  const missionHijackTx = await signAndSendNearTransaction({
+    signerId: contractId,
+    signerPublicKey: rogueOperatorKey.publicKey,
+    signerPrivateKey: rogueOperatorKey.privateKey,
+    receiverId: contractId,
+    actions: [
+      NearActions.functionCall({
+        methodName: "update_mission",
+        args: {
+          agent_id: contractId,
+          max_per_tx: "999999000000000000000000000",
+          epoch_spend_cap: "999999000000000000000000000",
+          min_return_bps: 0,
+        },
+        gas: 50_000_000_000_000n,
+        deposit: 0n,
+      }),
+    ],
+  });
+  const missionHijackStatus = summarizeStatus(missionHijackTx.status);
+  console.log("6. Rogue agent/operator Mission tamper rejected tx:", missionHijackTx.txHash, missionHijackStatus);
+
+  // 7. Live Cross-Contract MPC Failure & Atomic Snapback Refund (`v1.signer-prod.testnet` rejects -> `#[private] on_foreign_tx_verified` refunds 100%)
   const ghostRefundTx = await signAndSendNearTransaction({
     signerId: contractId,
     signerPublicKey: agentKey.publicKey,
@@ -244,6 +343,8 @@ async function main() {
           intent_id: "intent-ghost-refund-01",
           counterparty_id: "solver-prime.near",
           amount: "150000000000000000000000", // 0.15 NEAR locked -> refunded on-chain!
+          amount_out: "149000000000000000000000",
+          token_out: "bnb:USDC",
           nonce: 1,
           chain: "Ethereum", // Unwhitelisted on v1.signer-prod.testnet -> triggers immediate cross-contract failure & atomic refund callback
           tx_id_hex: "ab".repeat(32),
@@ -255,9 +356,9 @@ async function main() {
       }),
     ],
   });
-  console.log("4. Cross-contract v1.signer-prod.testnet failure -> atomic refund tx:", ghostRefundTx.txHash, summarizeStatus(ghostRefundTx.status));
+  console.log("7. Cross-contract v1.signer-prod.testnet failure -> atomic refund tx:", ghostRefundTx.txHash, summarizeStatus(ghostRefundTx.status));
 
-  // 5. Live Finalized BSC Testnet (`Bnb`) Cross-Chain Verification Request via `v1.signer-prod.testnet` (DomainId 3)
+  // 8. Live Finalized BSC Testnet (`Bnb`) Cross-Chain Verification Request via `v1.signer-prod.testnet` (DomainId 3)
   const bnbFixture = await fetchLiveBnbTestnetFinalizedTx();
   const liveBnbMpcTx = await signAndSendNearTransaction({
     signerId: contractId,
@@ -272,6 +373,8 @@ async function main() {
           intent_id: "intent-bnb-finalized-02",
           counterparty_id: "solver-prime.near",
           amount: "200000000000000000000000", // 0.20 NEAR locked in-flight awaiting MPC finality
+          amount_out: "199500000000000000000000",
+          token_out: "bnb:USDC",
           nonce: 2,
           chain: "Bnb",
           tx_id_hex: bnbFixture.txIdHex,
@@ -283,10 +386,46 @@ async function main() {
       }),
     ],
   });
-  console.log("5. Live Bnb finalized tx -> v1.signer-prod.testnet yield request tx:", liveBnbMpcTx.txHash);
+  console.log("8. Live Bnb finalized tx -> v1.signer-prod.testnet yield request tx:", liveBnbMpcTx.txHash);
 
-  // Brief wait for MPC nodes on testnet if they respond within a few blocks, then read live contract view state
-  await new Promise((r) => setTimeout(r, 8000));
+  // 9. Adversarial Proof: Duplicate Nonce / Stalled-Relayer Retry Loop rejected on-chain (`ERR_NON_MONOTONIC_NONCE`)
+  const duplicateNonceTx = await signAndSendNearTransaction({
+    signerId: contractId,
+    signerPublicKey: agentKey.publicKey,
+    signerPrivateKey: agentKey.privateKey,
+    receiverId: contractId,
+    actions: [
+      NearActions.functionCall({
+        methodName: "initiate_intent",
+        args: {
+          intent_id: "intent-retry-nonce-2",
+          counterparty_id: "solver-prime.near",
+          amount: "100000000000000000000000",
+          amount_out: "100000000000000000000000",
+          token_out: "bnb:USDC",
+          nonce: 2,
+          chain: "Bnb",
+          dispatch_mpc: false,
+        },
+        gas: 200_000_000_000_000n,
+        deposit: 0n,
+      }),
+    ],
+  });
+  const duplicateNonceStatus = summarizeStatus(duplicateNonceTx.status);
+  console.log("9. Duplicate nonce retry rejected tx:", duplicateNonceTx.txHash, duplicateNonceStatus);
+
+  // Wait for MPC threshold signature settlement (poll up to ~20s for Settled status)
+  let bnbIntent = null;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    bnbIntent = await callNearViewFunction({
+      contractId,
+      methodName: "get_intent",
+      args: { intent_id: "intent-bnb-finalized-02" },
+    }).catch(() => null);
+    if (bnbIntent?.status?.state === "Settled") break;
+  }
 
   const acctView = await nearRpc("query", {
     request_type: "view_account",
@@ -306,11 +445,6 @@ async function main() {
     contractId,
     methodName: "get_intent",
     args: { intent_id: "intent-ghost-refund-01" },
-  });
-  const bnbIntent = await callNearViewFunction({
-    contractId,
-    methodName: "get_intent",
-    args: { intent_id: "intent-bnb-finalized-02" },
   });
 
   const ownerPubBytes = base58Decode(ownerCred.public_key);
@@ -340,6 +474,32 @@ async function main() {
       adversarialFullAccessKeyRejected: {
         txHash: fullAccessAttemptTx.txHash,
         explorerUrl: `https://testnet.nearblocks.io/txns/${fullAccessAttemptTx.txHash}`,
+        errorCode: "ERR_FULL_ACCESS_KEY_FORBIDDEN",
+        detail: JSON.stringify(fullAccessStatus.failure || fullAccessStatus),
+      },
+      adversarialScamcoinSwapRejected: {
+        txHash: scamcoinAttemptTx.txHash,
+        explorerUrl: `https://testnet.nearblocks.io/txns/${scamcoinAttemptTx.txHash}`,
+        errorCode: "ERR_MISSION_ASSET_BLOCKED",
+        detail: JSON.stringify(scamcoinStatus.failure || scamcoinStatus),
+      },
+      adversarialSlippageDrainRejected: {
+        txHash: slippageDrainTx.txHash,
+        explorerUrl: `https://testnet.nearblocks.io/txns/${slippageDrainTx.txHash}`,
+        errorCode: "ERR_SLIPPAGE_COLLAR_VIOLATION",
+        detail: JSON.stringify(slippageStatus.failure || slippageStatus),
+      },
+      adversarialAgentMissionHijackRejected: {
+        txHash: missionHijackTx.txHash,
+        explorerUrl: `https://testnet.nearblocks.io/txns/${missionHijackTx.txHash}`,
+        errorCode: "ERR_OWNER_KEY_REQUIRED",
+        detail: JSON.stringify(missionHijackStatus.failure || missionHijackStatus),
+      },
+      adversarialDuplicateNonceRejected: {
+        txHash: duplicateNonceTx.txHash,
+        explorerUrl: `https://testnet.nearblocks.io/txns/${duplicateNonceTx.txHash}`,
+        errorCode: "ERR_NON_MONOTONIC_NONCE",
+        detail: JSON.stringify(duplicateNonceStatus.failure || duplicateNonceStatus),
       },
       crossContractMpcFailureAtomicRefund: {
         txHash: ghostRefundTx.txHash,

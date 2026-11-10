@@ -89,6 +89,8 @@ pub struct AgentBudgetLedger {
     pub current_epoch_exposure: U128String,
     pub epoch_started_at_ms: u64,
     pub allowed_counterparties: BTreeSet<String>,
+    pub allowed_output_tokens: BTreeSet<String>,
+    pub min_return_bps: u16,
     pub last_nonce: u64,
 }
 
@@ -273,10 +275,52 @@ impl EmetSettlementKernel {
             current_epoch_exposure: U128String(0),
             epoch_started_at_ms: ctx.block_timestamp_ms,
             allowed_counterparties: allowed_counterparties.into_iter().collect(),
+            allowed_output_tokens: BTreeSet::new(),
+            min_return_bps: 0,
             last_nonce: 0,
         };
         self.agents.insert(agent_id, ledger.clone());
         Ok(ledger)
+    }
+
+    pub fn update_agent_mission(
+        &mut self,
+        ctx: &ExecutionContext,
+        agent_id: &str,
+        max_per_tx: U128String,
+        epoch_spend_cap: U128String,
+        min_return_bps: u16,
+        allowed_counterparties: Option<Vec<String>>,
+        allowed_output_tokens: Option<Vec<String>>,
+    ) -> Result<AgentBudgetLedger, KernelError> {
+        self.assert_initialized()?;
+        let mut agent = self
+            .agents
+            .get(agent_id)
+            .ok_or_else(|| KernelError::AgentNotRegistered(agent_id.to_string()))?
+            .clone();
+
+        if matches!(ctx.key_permission, CallerKeyPermission::FunctionCall { .. })
+            || (ctx.predecessor_account_id != self.owner_id
+                && ctx.predecessor_account_id != agent.owner_id)
+        {
+            return Err(KernelError::UnauthorizedOwner);
+        }
+        if min_return_bps > 10_000 {
+            return Err(KernelError::ArithmeticOverflow);
+        }
+
+        agent.max_per_tx = max_per_tx;
+        agent.epoch_spend_cap = epoch_spend_cap;
+        agent.min_return_bps = min_return_bps;
+        if let Some(cps) = allowed_counterparties {
+            agent.allowed_counterparties = cps.into_iter().collect();
+        }
+        if let Some(toks) = allowed_output_tokens {
+            agent.allowed_output_tokens = toks.into_iter().collect();
+        }
+        self.agents.insert(agent.agent_id.clone(), agent.clone());
+        Ok(agent)
     }
 
     pub fn upsert_counterparty_profile(
@@ -391,6 +435,37 @@ impl EmetSettlementKernel {
             });
         }
         Ok(())
+    }
+
+    pub fn initiate_intent_with_mission(
+        &mut self,
+        ctx: &ExecutionContext,
+        intent_id: String,
+        counterparty_id: String,
+        amount: U128String,
+        amount_out: Option<U128String>,
+        token_out: Option<String>,
+        nonce: u64,
+        payload: ForeignTxSignPayload,
+    ) -> Result<CrossChainIntent, KernelError> {
+        self.assert_initialized()?;
+        if matches!(ctx.key_permission, CallerKeyPermission::FullAccess) {
+            return Err(KernelError::FullAccessKeyForbiddenForAgent);
+        }
+        if let Some(agent) = self.agents.get(&ctx.predecessor_account_id) {
+            if !agent.allowed_output_tokens.is_empty() || agent.min_return_bps > 0 {
+                let tok = token_out.as_deref().unwrap_or("");
+                let out = amount_out.map(|u| u.0).unwrap_or(0);
+                self.evaluate_token_diff_mission(
+                    &agent.allowed_output_tokens,
+                    tok,
+                    amount.0,
+                    out,
+                    agent.min_return_bps,
+                )?;
+            }
+        }
+        self.initiate_intent(ctx, intent_id, counterparty_id, amount, nonce, payload)
     }
 
     pub fn initiate_intent(

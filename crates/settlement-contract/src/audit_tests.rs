@@ -174,6 +174,66 @@ pub fn blocks_scamcoin_token_diff_and_excessive_slippage_mission_violations() {
         9800,
     );
     assert_eq!(ok_res, Ok(()));
+
+    // 4. End-to-end on-chain initiate_intent_with_mission blocks SCAMCOIN & unauthorized mission update
+    let mut live_kernel = setup_kernel();
+    let agent_hijack = live_kernel.update_agent_mission(
+        &agent_ctx("agent-alpha.near", 0),
+        "agent-alpha.near",
+        U128String(999_000_000_000),
+        U128String(999_000_000_000),
+        0,
+        None,
+        None,
+    );
+    assert_eq!(agent_hijack, Err(KernelError::UnauthorizedOwner));
+
+    live_kernel
+        .update_agent_mission(
+            &owner_ctx(),
+            "agent-alpha.near",
+            U128String(4_000_000_000),
+            U128String(6_000_000_000),
+            9500,
+            None,
+            Some(vec!["nep141:usdc.near".to_string(), "solana:USDC".to_string()]),
+        )
+        .unwrap();
+
+    let blocked_scam = live_kernel.initiate_intent_with_mission(
+        &agent_ctx("agent-alpha.near", 0),
+        "intent-scam-onchain".to_string(),
+        "solver-prime.near".to_string(),
+        U128String(1_000_000_000),
+        Some(U128String(1_000_000_000)),
+        Some("nep141:scamcoin.near".to_string()),
+        1,
+        sample_solana_finalized_payload(),
+    );
+    assert_eq!(
+        blocked_scam,
+        Err(KernelError::MissionAssetForbidden {
+            token_out: "nep141:scamcoin.near".to_string()
+        })
+    );
+
+    let blocked_drain = live_kernel.initiate_intent_with_mission(
+        &agent_ctx("agent-alpha.near", 0),
+        "intent-drain-onchain".to_string(),
+        "solver-prime.near".to_string(),
+        U128String(1_000_000_000),
+        Some(U128String(10_000_000)),
+        Some("solana:USDC".to_string()),
+        1,
+        sample_solana_finalized_payload(),
+    );
+    assert_eq!(
+        blocked_drain,
+        Err(KernelError::MissionSlippageExceeded {
+            expected_min_out: 950_000_000,
+            actual_out: 10_000_000
+        })
+    );
 }
 
 #[cfg_attr(test, test)]

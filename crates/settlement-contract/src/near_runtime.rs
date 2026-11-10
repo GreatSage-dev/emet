@@ -141,7 +141,60 @@ fn build_exec_ctx(key_permission: CallerKeyPermission) -> ExecutionContext {
 
 struct OnChainState {
     kernel: EmetSettlementKernel,
+    owner_pk_hex: String,
     agent_pks: BTreeMap<String, String>,
+}
+
+fn format_kernel_error(e: &crate::KernelError) -> String {
+    match e {
+        crate::KernelError::UnauthorizedOwner => {
+            "ERR_OWNER_KEY_REQUIRED: Only verified owner account may modify mission rules".to_string()
+        }
+        crate::KernelError::FullAccessKeyForbiddenForAgent => {
+            "ERR_FULL_ACCESS_KEY_FORBIDDEN: Autonomous agents must use scoped FunctionCall keys".to_string()
+        }
+        crate::KernelError::MissionAssetForbidden { token_out } => format!(
+            "ERR_MISSION_ASSET_BLOCKED: Output token '{token_out}' rejected by on-chain Mission allowlist"
+        ),
+        crate::KernelError::MissionSlippageExceeded {
+            expected_min_out,
+            actual_out,
+        } => format!(
+            "ERR_SLIPPAGE_COLLAR_VIOLATION: Expected >= {expected_min_out} out, got {actual_out}"
+        ),
+        crate::KernelError::CounterpartyBlocked {
+            counterparty,
+            reason,
+        } => format!("ERR_COUNTERPARTY_BLOCKED: {counterparty} — {reason}"),
+        crate::KernelError::CounterpartyRequiresHumanApproval {
+            counterparty,
+            reason,
+        } => format!("ERR_COUNTERPARTY_WARN_PAUSE: {counterparty} — {reason}"),
+        crate::KernelError::NonMonotonicNonce {
+            provided,
+            last_nonce,
+        } => format!("ERR_NON_MONOTONIC_NONCE: {provided} <= {last_nonce}"),
+        crate::KernelError::ExceedsPerTxLimit {
+            requested,
+            max_per_tx,
+        } => format!("ERR_EXCEEDS_MAX_PER_TX: {requested} > {max_per_tx}"),
+        crate::KernelError::ExceedsEpochCap {
+            requested_exposure,
+            cap,
+        } => format!("ERR_EXCEEDS_EPOCH_CAP: {requested_exposure} > {cap}"),
+        crate::KernelError::PrivateCallbackOnly => {
+            "ERR_PRIVATE_CALLBACK_ONLY: MPC callback rejected from untrusted caller".to_string()
+        }
+        other => format!("EMET_ERR: {other:?}"),
+    }
+}
+
+fn parse_csv_list(csv: &str) -> Vec<String> {
+    csv.split(',')
+        .map(|s| s.trim().trim_matches(|c| c == '[' || c == ']' || c == '"'))
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect()
 }
 
 fn put_u32(buf: &mut Vec<u8>, v: u32) {
@@ -322,6 +375,11 @@ fn save_state(st: &OnChainState) {
         for cp in &a.allowed_counterparties {
             put_str(&mut buf, cp);
         }
+        put_u32(&mut buf, a.allowed_output_tokens.len() as u32);
+        for tok in &a.allowed_output_tokens {
+            put_str(&mut buf, tok);
+        }
+        buf.extend_from_slice(&a.min_return_bps.to_le_bytes());
         put_u64(&mut buf, a.last_nonce);
     }
 
@@ -367,6 +425,7 @@ fn save_state(st: &OnChainState) {
         put_u64(&mut buf, rc.issued_at_ms);
     }
 
+    put_str(&mut buf, &st.owner_pk_hex);
     put_u32(&mut buf, st.agent_pks.len() as u32);
     for (aid, pk) in &st.agent_pks {
         put_str(&mut buf, aid);
@@ -424,6 +483,12 @@ fn load_state() -> OnChainState {
         for _ in 0..cp_len {
             allowed_counterparties.insert(r.str());
         }
+        let tok_len = r.u32() as usize;
+        let mut allowed_output_tokens = BTreeSet::new();
+        for _ in 0..tok_len {
+            allowed_output_tokens.insert(r.str());
+        }
+        let min_return_bps = r.u16();
         let last_nonce = r.u64();
         agents.insert(
             agent_id.clone(),
@@ -439,6 +504,8 @@ fn load_state() -> OnChainState {
                 current_epoch_exposure,
                 epoch_started_at_ms,
                 allowed_counterparties,
+                allowed_output_tokens,
+                min_return_bps,
                 last_nonce,
             },
         );
@@ -536,6 +603,7 @@ fn load_state() -> OnChainState {
         );
     }
 
+    let owner_pk_hex = r.str();
     let pk_count = r.u32() as usize;
     let mut agent_pks = BTreeMap::new();
     for _ in 0..pk_count {
@@ -553,6 +621,7 @@ fn load_state() -> OnChainState {
             receipts,
             counterparties,
         },
+        owner_pk_hex,
         agent_pks,
     }
 }
@@ -661,9 +730,14 @@ fn ledger_to_json(a: &AgentBudgetLedger, pk_hex: Option<&String>) -> String {
         .iter()
         .map(|s| format!("\"{s}\""))
         .collect();
+    let toks: Vec<String> = a
+        .allowed_output_tokens
+        .iter()
+        .map(|s| format!("\"{s}\""))
+        .collect();
     let pk = pk_hex.map(|s| s.as_str()).unwrap_or("");
     format!(
-        "{{\"agent_id\":\"{}\",\"owner_id\":\"{}\",\"available_balance\":\"{}\",\"in_flight_locked\":\"{}\",\"settled_spent\":\"{}\",\"refunded_saved\":\"{}\",\"max_per_tx\":\"{}\",\"epoch_spend_cap\":\"{}\",\"current_epoch_exposure\":\"{}\",\"last_nonce\":{},\"authorized_pk_hex\":\"{}\",\"allowed_counterparties\":[{}]}}",
+        "{{\"agent_id\":\"{}\",\"owner_id\":\"{}\",\"available_balance\":\"{}\",\"in_flight_locked\":\"{}\",\"settled_spent\":\"{}\",\"refunded_saved\":\"{}\",\"max_per_tx\":\"{}\",\"epoch_spend_cap\":\"{}\",\"current_epoch_exposure\":\"{}\",\"min_return_bps\":{},\"last_nonce\":{},\"authorized_pk_hex\":\"{}\",\"allowed_counterparties\":[{}],\"allowed_output_tokens\":[{}]}}",
         a.agent_id,
         a.owner_id,
         a.available_balance.0,
@@ -673,9 +747,11 @@ fn ledger_to_json(a: &AgentBudgetLedger, pk_hex: Option<&String>) -> String {
         a.max_per_tx.0,
         a.epoch_spend_cap.0,
         a.current_epoch_exposure.0,
+        a.min_return_bps,
         a.last_nonce,
         pk,
-        cps.join(",")
+        cps.join(","),
+        toks.join(",")
     )
 }
 
@@ -698,21 +774,26 @@ pub extern "C" fn init() {
     let mpc_signer =
         json_str(&raw, "mpc_signer_id").unwrap_or_else(|| "v1.signer-prod.testnet".to_string());
     let domain_id = json_u64(&raw, "domain_id").unwrap_or(3);
+    let owner_pk_hex = json_str(&raw, "owner_pk_hex")
+        .unwrap_or_else(env_signer_pk_hex)
+        .trim()
+        .to_lowercase();
 
     let mut kernel = EmetSettlementKernel::init(owner_id.clone(), mpc_signer.clone())
-        .unwrap_or_else(|e| near_panic(&format!("EMET_ERR: {e:?}")));
+        .unwrap_or_else(|e| near_panic(&format_kernel_error(&e)));
     kernel.default_domain_id = DomainId(domain_id);
 
     let state = OnChainState {
         kernel,
+        owner_pk_hex: owner_pk_hex.clone(),
         agent_pks: BTreeMap::new(),
     };
     save_state(&state);
     near_log(&format!(
-        "EVENT_JSON:{{\"standard\":\"emet\",\"version\":\"1.0.0\",\"event\":\"contract_initialized\",\"data\":{{\"owner_id\":\"{owner_id}\",\"mpc_signer_id\":\"{mpc_signer}\",\"domain_id\":{domain_id}}}}}"
+        "EVENT_JSON:{{\"standard\":\"emet\",\"version\":\"1.0.0\",\"event\":\"contract_initialized\",\"data\":{{\"owner_id\":\"{owner_id}\",\"owner_pk_hex\":\"{owner_pk_hex}\",\"mpc_signer_id\":\"{mpc_signer}\",\"domain_id\":{domain_id}}}}}"
     ));
     near_return_json(&format!(
-        "{{\"initialized\":true,\"owner_id\":\"{owner_id}\",\"mpc_signer_id\":\"{mpc_signer}\",\"domain_id\":{domain_id}}}"
+        "{{\"initialized\":true,\"owner_id\":\"{owner_id}\",\"owner_pk_hex\":\"{owner_pk_hex}\",\"mpc_signer_id\":\"{mpc_signer}\",\"domain_id\":{domain_id}}}"
     ));
 }
 
@@ -734,7 +815,7 @@ pub extern "C" fn upsert_counterparty() {
     };
     st.kernel
         .upsert_counterparty_profile(&ctx, profile)
-        .unwrap_or_else(|e| near_panic(&format!("EMET_ERR: {e:?}")));
+        .unwrap_or_else(|e| near_panic(&format_kernel_error(&e)));
     save_state(&st);
     near_return_json(&format!(
         "{{\"status\":\"updated\",\"receiver_id\":\"{receiver_id}\"}}"
@@ -745,9 +826,10 @@ pub extern "C" fn upsert_counterparty() {
 pub extern "C" fn register_agent() {
     let mut st = load_state();
     let raw = env_input_str();
+    let signer_pk_hex = env_signer_pk_hex();
     let ctx = build_exec_ctx(CallerKeyPermission::FullAccess);
-    if ctx.predecessor_account_id != st.kernel.owner_id {
-        near_panic("EMET_ERR: UnauthorizedOwner — Only contract owner can register agent vaults");
+    if ctx.predecessor_account_id != st.kernel.owner_id || signer_pk_hex != st.owner_pk_hex {
+        near_panic("ERR_OWNER_KEY_REQUIRED: Only verified contract owner key can register agent vaults");
     }
 
     let agent_id =
@@ -763,33 +845,90 @@ pub extern "C" fn register_agent() {
         U128String(json_u128(&raw, "epoch_spend_cap").unwrap_or(initial_budget.0));
     let allowed_csv =
         json_str(&raw, "allowed_counterparties").unwrap_or_else(|| "solver-prime.near".to_string());
-    let allowed: Vec<String> = allowed_csv
-        .split(',')
-        .map(|s| s.trim().trim_matches(|c| c == '[' || c == ']' || c == '"'))
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .collect();
+    let allowed = parse_csv_list(&allowed_csv);
+    let allowed_tokens_csv = json_str(&raw, "allowed_output_tokens").unwrap_or_default();
+    let allowed_tokens = if allowed_tokens_csv.is_empty() {
+        None
+    } else {
+        Some(parse_csv_list(&allowed_tokens_csv))
+    };
+    let min_return_bps = json_u64(&raw, "min_return_bps").unwrap_or(0) as u16;
 
     let clean_pk = authorized_pk_hex.trim().to_lowercase();
-    let ledger = st
-        .kernel
+    st.kernel
         .register_agent(
             &ctx,
             agent_id.clone(),
             initial_budget,
             max_per_tx,
             epoch_spend_cap,
-            allowed,
+            allowed.clone(),
         )
-        .unwrap_or_else(|e| near_panic(&format!("EMET_ERR: {e:?}")));
+        .unwrap_or_else(|e| near_panic(&format_kernel_error(&e)));
+
+    let ledger = st
+        .kernel
+        .update_agent_mission(
+            &ctx,
+            &agent_id,
+            max_per_tx,
+            epoch_spend_cap,
+            min_return_bps,
+            Some(allowed),
+            allowed_tokens,
+        )
+        .unwrap_or_else(|e| near_panic(&format_kernel_error(&e)));
+
     st.agent_pks.insert(agent_id.clone(), clean_pk.clone());
     save_state(&st);
 
     near_log(&format!(
-        "EVENT_JSON:{{\"standard\":\"emet\",\"version\":\"1.0.0\",\"event\":\"agent_registered\",\"data\":{{\"agent_id\":\"{agent_id}\",\"initial_budget\":\"{}\",\"authorized_pk_hex\":\"{clean_pk}\"}}}}",
+        "EVENT_JSON:{{\"standard\":\"emet\",\"version\":\"1.0.0\",\"event\":\"agent_registered\",\"data\":{{\"agent_id\":\"{agent_id}\",\"initial_budget\":\"{}\",\"authorized_pk_hex\":\"{clean_pk}\",\"min_return_bps\":{min_return_bps}}}}}",
         initial_budget.0
     ));
     near_return_json(&ledger_to_json(&ledger, Some(&clean_pk)));
+}
+
+#[no_mangle]
+pub extern "C" fn update_mission() {
+    let mut st = load_state();
+    let raw = env_input_str();
+    let signer_pk_hex = env_signer_pk_hex();
+    let ctx = build_exec_ctx(CallerKeyPermission::FullAccess);
+    if ctx.predecessor_account_id != st.kernel.owner_id || signer_pk_hex != st.owner_pk_hex {
+        near_panic("ERR_OWNER_KEY_REQUIRED: Agent FunctionCall keys or non-owners cannot modify Mission spending rules");
+    }
+    let agent_id = json_str(&raw, "agent_id").unwrap_or_else(|| st.kernel.owner_id.clone());
+    let existing = st
+        .kernel
+        .agents
+        .get(&agent_id)
+        .unwrap_or_else(|| near_panic("EMET_ERR: AgentNotRegistered"))
+        .clone();
+
+    let max_per_tx = U128String(json_u128(&raw, "max_per_tx").unwrap_or(existing.max_per_tx.0));
+    let epoch_spend_cap =
+        U128String(json_u128(&raw, "epoch_spend_cap").unwrap_or(existing.epoch_spend_cap.0));
+    let min_return_bps =
+        json_u64(&raw, "min_return_bps").unwrap_or(existing.min_return_bps as u64) as u16;
+    let cps = json_str(&raw, "allowed_counterparties").map(|s| parse_csv_list(&s));
+    let toks = json_str(&raw, "allowed_output_tokens").map(|s| parse_csv_list(&s));
+
+    let updated = st
+        .kernel
+        .update_agent_mission(
+            &ctx,
+            &agent_id,
+            max_per_tx,
+            epoch_spend_cap,
+            min_return_bps,
+            cps,
+            toks,
+        )
+        .unwrap_or_else(|e| near_panic(&format_kernel_error(&e)));
+    let pk = st.agent_pks.get(&agent_id).cloned();
+    save_state(&st);
+    near_return_json(&ledger_to_json(&updated, pk.as_ref()));
 }
 
 #[no_mangle]
@@ -802,7 +941,7 @@ pub extern "C" fn report_malicious_counterparty() {
     let ev = json_str(&raw, "evidence_tx_hash").unwrap_or_else(|| "onchain_report".to_string());
     st.kernel
         .report_malicious_counterparty(&ctx, cp.clone(), ev)
-        .unwrap_or_else(|e| near_panic(&format!("EMET_ERR: {e:?}")));
+        .unwrap_or_else(|e| near_panic(&format_kernel_error(&e)));
     save_state(&st);
     near_return_json(&format!(
         "{{\"status\":\"blocked\",\"counterparty_id\":\"{cp}\"}}"
@@ -838,6 +977,8 @@ pub extern "C" fn initiate_intent() {
     );
     let nonce = json_u64(&raw, "nonce").unwrap_or_else(|| near_panic("EMET_ERR: Missing nonce"));
     let chain_str = json_str(&raw, "chain").unwrap_or_else(|| "Bnb".to_string());
+    let token_out = json_str(&raw, "token_out");
+    let amount_out = json_u128(&raw, "amount_out").map(U128String);
     let dispatch_mpc = json_bool(&raw, "dispatch_mpc", true);
 
     let (payload, mpc_request_json_inner) = if chain_str.eq_ignore_ascii_case("Solana") {
@@ -898,15 +1039,17 @@ pub extern "C" fn initiate_intent() {
 
     let intent = st
         .kernel
-        .initiate_intent(
+        .initiate_intent_with_mission(
             &ctx,
             intent_id.clone(),
             counterparty_id.clone(),
             amount,
+            amount_out,
+            token_out,
             nonce,
             payload,
         )
-        .unwrap_or_else(|e| near_panic(&format!("EMET_ERR: {e:?}")));
+        .unwrap_or_else(|e| near_panic(&format_kernel_error(&e)));
 
     // Persist locked state BEFORE cross-contract MPC call (Checks-Effects-Interactions).
     save_state(&st);
@@ -966,6 +1109,9 @@ pub extern "C" fn on_foreign_tx_verified() {
     let mut st = load_state();
     let raw = env_input_str();
     let ctx = build_exec_ctx(CallerKeyPermission::FullAccess);
+    if ctx.predecessor_account_id != ctx.current_account_id {
+        near_panic("ERR_PRIVATE_CALLBACK_ONLY: MPC callback rejected from untrusted caller");
+    }
     let intent_id =
         json_str(&raw, "intent_id").unwrap_or_else(|| near_panic("EMET_ERR: Missing intent_id"));
 
@@ -996,7 +1142,7 @@ pub extern "C" fn on_foreign_tx_verified() {
     let receipt = st
         .kernel
         .on_foreign_tx_verified(&ctx, intent_id.clone(), verdict)
-        .unwrap_or_else(|e| near_panic(&format!("EMET_ERR: {e:?}")));
+        .unwrap_or_else(|e| near_panic(&format_kernel_error(&e)));
     save_state(&st);
 
     let st_json = status_to_json(&receipt.status);
@@ -1021,9 +1167,10 @@ pub extern "C" fn get_contract_info() {
     let st = load_state();
     let k = &st.kernel;
     near_return_json(&format!(
-        "{{\"initialized\":{},\"owner_id\":\"{}\",\"mpc_signer_id\":\"{}\",\"domain_id\":{},\"agent_count\":{},\"intent_count\":{},\"receipt_count\":{}}}",
+        "{{\"initialized\":{},\"owner_id\":\"{}\",\"owner_pk_hex\":\"{}\",\"mpc_signer_id\":\"{}\",\"domain_id\":{},\"agent_count\":{},\"intent_count\":{},\"receipt_count\":{}}}",
         k.initialized,
         k.owner_id,
+        st.owner_pk_hex,
         k.mpc_signer_contract_id,
         k.default_domain_id.0,
         k.agents.len(),
