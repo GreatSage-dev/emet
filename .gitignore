@@ -1,6 +1,7 @@
 # Build artifacts
 target/
 dist/
+public/
 node_modules/
 *.wasm
 !artifacts/emet_settlement_contract.wasm

@@ -18,10 +18,48 @@ import { COCKPIT_HTML } from "./cockpit_html.mjs";
 import { LANDING_HTML } from "./landing_html.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TESTNET_MANIFEST_PATH = path.resolve(__dirname, "../../../testnet-deployment.json");
+const TESTNET_MANIFEST_URL = new URL("../../../testnet-deployment.json", import.meta.url);
+const TESTNET_MANIFEST_PATH = fileURLToPath(TESTNET_MANIFEST_URL);
 
-export function createEmetGatewayServer({
-  port = 4173,
+function readTestnetManifest() {
+  try {
+    if (fs.existsSync(TESTNET_MANIFEST_URL)) {
+      return JSON.parse(fs.readFileSync(TESTNET_MANIFEST_URL, "utf8"));
+    }
+    const cwdPath = path.resolve(process.cwd(), "testnet-deployment.json");
+    if (fs.existsSync(cwdPath)) {
+      return JSON.parse(fs.readFileSync(cwdPath, "utf8"));
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function readJsonBody(req) {
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === "object") return req.body;
+    if (typeof req.body === "string") {
+      return req.body.trim() ? JSON.parse(req.body) : {};
+    }
+  }
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on("error", (err) => reject(err));
+  });
+}
+
+export function createEmetRequestHandler({
   kernel = new EmetKernelSimulator(),
   enableNaiveBypass = false,
 } = {}) {
@@ -84,7 +122,7 @@ export function createEmetGatewayServer({
     "token_admin_root_session",
   ]);
 
-  const server = createServer(async (req, res) => {
+  return async function handleRequest(req, res) {
     // CORS & JSON headers
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -100,7 +138,7 @@ export function createEmetGatewayServer({
       return;
     }
 
-    const parsedUrl = new URL(req.url || "/", `http://127.0.0.1:${port}`);
+    const parsedUrl = new URL(req.url || "/", `http://${req.headers?.host || "127.0.0.1"}`);
     const pathname = parsedUrl.pathname.replace(/\/+$/, "") || "/";
 
     // Authentication Helper: strict separation between Agent session and Human Owner key
@@ -131,10 +169,7 @@ export function createEmetGatewayServer({
 
     // ROUTE 1: Gateway Health & MPC Status
     if (method === "GET" && pathname === "/api/health") {
-      const hasManifest = fs.existsSync(TESTNET_MANIFEST_PATH);
-      const manifest = hasManifest
-        ? JSON.parse(fs.readFileSync(TESTNET_MANIFEST_PATH, "utf8"))
-        : null;
+      const manifest = readTestnetManifest();
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
@@ -150,12 +185,12 @@ export function createEmetGatewayServer({
 
     // ROUTE 1B: Live NEAR Testnet Contract Deployment & On-Chain State Probe
     if (method === "GET" && pathname === "/api/testnet/status") {
-      if (!fs.existsSync(TESTNET_MANIFEST_PATH)) {
+      const manifest = readTestnetManifest();
+      if (!manifest) {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ deployed: false, error: "testnet-deployment.json not found" }));
         return;
       }
-      const manifest = JSON.parse(fs.readFileSync(TESTNET_MANIFEST_PATH, "utf8"));
       let liveRpcLedger = null;
       let liveRpcSource = "cached-manifest";
       try {
@@ -293,28 +328,22 @@ export function createEmetGatewayServer({
     // ROUTE 6: Counterparty Update (PUT)
     if (method === "PUT" && cpMatch) {
       const cpId = decodeURIComponent(cpMatch[1]);
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-      req.on("end", () => {
-        try {
-          const parsed = JSON.parse(body || "{}");
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(
-            JSON.stringify({
-              status: "updated",
-              counterpartyId: cpId,
-              accountAgeDays: parsed.accountAgeDays ?? 30,
-              isContract: parsed.isContract ?? true,
-              priorSuccessfulSettlements: parsed.priorSuccessfulSettlements ?? 0,
-            })
-          );
-        } catch {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Invalid JSON body" }));
-        }
-      });
+      try {
+        const parsed = await readJsonBody(req);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            status: "updated",
+            counterpartyId: cpId,
+            accountAgeDays: parsed.accountAgeDays ?? 30,
+            isContract: parsed.isContract ?? true,
+            priorSuccessfulSettlements: parsed.priorSuccessfulSettlements ?? 0,
+          })
+        );
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid JSON body" }));
+      }
       return;
     }
 
@@ -322,69 +351,57 @@ export function createEmetGatewayServer({
     const profileMatch = pathname.match(/^\/api\/agents\/([^/]+)\/(profile|account)$/);
     if (method === "PUT" && profileMatch) {
       const targetAgentId = decodeURIComponent(profileMatch[1]);
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-      req.on("end", () => {
-        try {
-          const parsed = JSON.parse(body || "{}");
-          
-          // Emet Shield Defense against Mass Assignment (OWASP API3 / BOPLA):
-          // Reject client attempts to inject privileged role or financial limits unless authenticated as admin
-          const privilegedKeys = ["role", "isAdmin", "epochSpendCap", "maxPerTx", "availableBalance"];
-          const injectedPrivileged = privilegedKeys.filter((k) => k in parsed);
+      try {
+        const parsed = await readJsonBody(req);
 
-          if (!enableNaiveBypass && injectedPrivileged.length > 0 && callerAgentId !== "admin.near") {
-            res.writeHead(403, { "Content-Type": "application/json" });
-            res.end(
-              JSON.stringify({
-                error: "Forbidden: Mass assignment violation — Privileged field escalation rejected by Emet Shield.",
-                injectedFields: injectedPrivileged,
-                agentId: targetAgentId,
-              })
-            );
-            return;
-          }
+        // Emet Shield Defense against Mass Assignment (OWASP API3 / BOPLA):
+        // Reject client attempts to inject privileged role or financial limits unless authenticated as admin
+        const privilegedKeys = ["role", "isAdmin", "epochSpendCap", "maxPerTx", "availableBalance"];
+        const injectedPrivileged = privilegedKeys.filter((k) => k in parsed);
 
-          // Whitelisted profile fields allowed for self-service agent updates
-          res.writeHead(200, { "Content-Type": "application/json" });
+        if (!enableNaiveBypass && injectedPrivileged.length > 0 && callerAgentId !== "admin.near") {
+          res.writeHead(403, { "Content-Type": "application/json" });
           res.end(
             JSON.stringify({
-              status: "updated",
+              error: "Forbidden: Mass assignment violation — Privileged field escalation rejected by Emet Shield.",
+              injectedFields: injectedPrivileged,
               agentId: targetAgentId,
-              displayName: parsed.displayName || targetAgentId,
-              webhookUrl: parsed.webhookUrl || null,
-              role: enableNaiveBypass && parsed.role ? parsed.role : "agent",
-              isAdmin: enableNaiveBypass && parsed.isAdmin ? parsed.isAdmin : false,
-              epochSpendCap: "10000000000",
             })
           );
-        } catch {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Invalid JSON body" }));
+          return;
         }
-      });
+
+        // Whitelisted profile fields allowed for self-service agent updates
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            status: "updated",
+            agentId: targetAgentId,
+            displayName: parsed.displayName || targetAgentId,
+            webhookUrl: parsed.webhookUrl || null,
+            role: enableNaiveBypass && parsed.role ? parsed.role : "agent",
+            isAdmin: enableNaiveBypass && parsed.isAdmin ? parsed.isAdmin : false,
+            epochSpendCap: "10000000000",
+          })
+        );
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid JSON body" }));
+      }
       return;
     }
 
     // ROUTE 7: Initiate Verified Intent
     if (method === "POST" && pathname === "/api/intents/initiate") {
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-      req.on("end", () => {
-        try {
-          const params = JSON.parse(body);
-          const intent = kernel.initiateIntent(params);
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ status: "success", intent }));
-        } catch (err) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ status: "rejected", error: err.message }));
-        }
-      });
+      try {
+        const params = await readJsonBody(req);
+        const intent = kernel.initiateIntent(params);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "success", intent }));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "rejected", error: err.message }));
+      }
       return;
     }
 
@@ -402,134 +419,122 @@ export function createEmetGatewayServer({
         return;
       }
       const targetAgentId = decodeURIComponent(missionMatch[1]);
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-      req.on("end", () => {
-        try {
-          const parsed = JSON.parse(body || "{}");
-          const updated = kernel.updateAgentMission({
-            agentId: targetAgentId,
-            ...parsed,
-          });
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ status: "updated", ledger: updated }));
-        } catch (err) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: err.message }));
-        }
-      });
+      try {
+        const parsed = await readJsonBody(req);
+        const updated = kernel.updateAgentMission({
+          agentId: targetAgentId,
+          ...parsed,
+        });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "updated", ledger: updated }));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: err.message }));
+      }
       return;
     }
 
     // ROUTE 7C: Two-Brain Clean-Room Evaluation & Automatic Escrow Lock on ALLOW
     if (method === "POST" && pathname === "/api/dual-brain/evaluate") {
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-      req.on("end", async () => {
-        try {
-          const params = JSON.parse(body || "{}");
-          if (!enableNaiveBypass && params.humanApprovedOverride && !isOwnerAuthorized) {
-            res.writeHead(403, { "Content-Type": "application/json" });
-            res.end(
-              JSON.stringify({
-                status: "forbidden",
-                error:
-                  "Forbidden: Agent session cannot self-approve WARN overrides. Requires separate human owner authorization.",
-              })
-            );
-            return;
-          }
-          const trace = await evaluateDualBrainPipeline({
-            kernel,
-            agentId: params.agentId || "alpha-treasury.near",
-            untrustedExternalText: params.untrustedExternalText || "",
-            proposedTx: params.proposedTx || {},
-            humanApprovedOverride: Boolean(params.humanApprovedOverride),
-          });
-
-          let lockedIntent = null;
-          if (trace.brain2Conscience.verdict === "ALLOW") {
-            const p = trace.glassWall.passedToBrain2;
-            if (params.humanApprovedOverride) {
-              // Owner explicitly approved this counterparty via OutLayer tasks::confirm
-              const agentObj = kernel.agents.get(trace.agentId);
-              if (agentObj) agentObj.allowedCounterparties.add(p.receiverId);
-              kernel.upsertCounterparty({
-                receiverId: p.receiverId,
-                accountAgeDays: 14,
-                isContract: true,
-                codeChangedRecently: false,
-                priorSuccessfulSettlements: 5,
-              });
-            }
-            const chain = p.targetChain || "Solana";
-            const foreignTxSpec =
-              chain === "Solana"
-                ? {
-                    chain: "Solana",
-                    txIdHex: "11".repeat(64),
-                    finality: "Finalized",
-                    extractors: [
-                      { type: "InnerInstruction", instructionIndex: 2, innerInstructionIndex: 0 },
-                    ],
-                    values: [
-                      {
-                        kind: "SvmInnerInstruction",
-                        programIdHex: "33".repeat(32),
-                        accountsHex: ["44".repeat(32), "55".repeat(32)],
-                        dataHex: "deadbeef",
-                      },
-                    ],
-                  }
-                : chain === "Bitcoin"
-                ? {
-                    chain: "Bitcoin",
-                    txIdHex: "55".repeat(32),
-                    confirmations: 6,
-                    extractors: [{ type: "BlockHash" }],
-                    values: [{ kind: "BitcoinBlockHash", blockHashHex: "2a".repeat(32) }],
-                  }
-                : {
-                    chain,
-                    txIdHex: "642441b3f1bebd9951b09e3fdedee8e03c304e48a1cca726039cfecea9082a05",
-                    finality: "Finalized",
-                    extractors: [{ type: "BlockHash" }],
-                    values: [
-                      {
-                        kind: "EvmBlockHash",
-                        blockHashHex:
-                          "9978b780d86d964d76ea8ec6db5c0f5f1c350a7f93ea5c97f25fb468ea1b2b1d",
-                      },
-                    ],
-                  };
-
-            lockedIntent = kernel.initiateIntent({
-              intentId: `intent-${p.nonce}-${Date.now().toString(36)}`,
-              agentId: trace.agentId,
-              counterpartyId: p.receiverId,
-              amount: p.amountIn,
-              nonce: p.nonce,
-              foreignTxSpec,
-            });
-          }
-
-          res.writeHead(200, { "Content-Type": "application/json" });
+      try {
+        const params = await readJsonBody(req);
+        if (!enableNaiveBypass && params.humanApprovedOverride && !isOwnerAuthorized) {
+          res.writeHead(403, { "Content-Type": "application/json" });
           res.end(
             JSON.stringify({
-              status: trace.brain2Conscience.verdict,
-              trace,
-              lockedIntent,
+              status: "forbidden",
+              error:
+                "Forbidden: Agent session cannot self-approve WARN overrides. Requires separate human owner authorization.",
             })
           );
-        } catch (err) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ status: "error", error: err.message }));
+          return;
         }
-      });
+        const trace = await evaluateDualBrainPipeline({
+          kernel,
+          agentId: params.agentId || "alpha-treasury.near",
+          untrustedExternalText: params.untrustedExternalText || "",
+          proposedTx: params.proposedTx || {},
+          humanApprovedOverride: Boolean(params.humanApprovedOverride),
+        });
+
+        let lockedIntent = null;
+        if (trace.brain2Conscience.verdict === "ALLOW") {
+          const p = trace.glassWall.passedToBrain2;
+          if (params.humanApprovedOverride) {
+            // Owner explicitly approved this counterparty via OutLayer tasks::confirm
+            const agentObj = kernel.agents.get(trace.agentId);
+            if (agentObj) agentObj.allowedCounterparties.add(p.receiverId);
+            kernel.upsertCounterparty({
+              receiverId: p.receiverId,
+              accountAgeDays: 14,
+              isContract: true,
+              codeChangedRecently: false,
+              priorSuccessfulSettlements: 5,
+            });
+          }
+          const chain = p.targetChain || "Solana";
+          const foreignTxSpec =
+            chain === "Solana"
+              ? {
+                  chain: "Solana",
+                  txIdHex: "11".repeat(64),
+                  finality: "Finalized",
+                  extractors: [
+                    { type: "InnerInstruction", instructionIndex: 2, innerInstructionIndex: 0 },
+                  ],
+                  values: [
+                    {
+                      kind: "SvmInnerInstruction",
+                      programIdHex: "33".repeat(32),
+                      accountsHex: ["44".repeat(32), "55".repeat(32)],
+                      dataHex: "deadbeef",
+                    },
+                  ],
+                }
+              : chain === "Bitcoin"
+              ? {
+                  chain: "Bitcoin",
+                  txIdHex: "55".repeat(32),
+                  confirmations: 6,
+                  extractors: [{ type: "BlockHash" }],
+                  values: [{ kind: "BitcoinBlockHash", blockHashHex: "2a".repeat(32) }],
+                }
+              : {
+                  chain,
+                  txIdHex: "642441b3f1bebd9951b09e3fdedee8e03c304e48a1cca726039cfecea9082a05",
+                  finality: "Finalized",
+                  extractors: [{ type: "BlockHash" }],
+                  values: [
+                    {
+                      kind: "EvmBlockHash",
+                      blockHashHex:
+                        "9978b780d86d964d76ea8ec6db5c0f5f1c350a7f93ea5c97f25fb468ea1b2b1d",
+                    },
+                  ],
+                };
+
+          lockedIntent = kernel.initiateIntent({
+            intentId: `intent-${p.nonce}-${Date.now().toString(36)}`,
+            agentId: trace.agentId,
+            counterpartyId: p.receiverId,
+            amount: p.amountIn,
+            nonce: p.nonce,
+            foreignTxSpec,
+          });
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            status: trace.brain2Conscience.verdict,
+            trace,
+            lockedIntent,
+          })
+        );
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "error", error: err.message }));
+      }
       return;
     }
 
@@ -551,25 +556,19 @@ export function createEmetGatewayServer({
         );
         return;
       }
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-      req.on("end", () => {
-        try {
-          const { intentId, verdict } = JSON.parse(body || "{}");
-          const receipt = kernel.reconcileForeignOutcome({
-            callerId: "emet.near",
-            intentId,
-            verdict,
-          });
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ status: "reconciled", receipt }));
-        } catch (err) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: err.message }));
-        }
-      });
+      try {
+        const { intentId, verdict } = await readJsonBody(req);
+        const receipt = kernel.reconcileForeignOutcome({
+          callerId: "emet.near",
+          intentId,
+          verdict,
+        });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "reconciled", receipt }));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: err.message }));
+      }
       return;
     }
 
@@ -583,7 +582,16 @@ export function createEmetGatewayServer({
     // Default 404
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: `Endpoint not found: ${pathname}` }));
-  });
+  };
+}
+
+export function createEmetGatewayServer({
+  port = 4173,
+  kernel = new EmetKernelSimulator(),
+  enableNaiveBypass = false,
+} = {}) {
+  const handler = createEmetRequestHandler({ kernel, enableNaiveBypass });
+  const server = createServer(handler);
 
   return {
     server,
