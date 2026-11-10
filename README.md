@@ -3,7 +3,7 @@
 ### Safe Spending Cards & Outcome-Verified Escrow for AI Agents on NEAR
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981.svg)](./LICENSE)
-[![Tests: 12/12 Passing (Exit Code 0)](https://img.shields.io/badge/Tests-12%2F12_Passing_(Code_0)-10b981.svg)](./packages/agent-gateway/tests/settlement.test.mjs)
+[![Tests: 13/13 Passing (Exit Code 0)](https://img.shields.io/badge/Tests-13%2F13_Passing_(Code_0)-10b981.svg)](./packages/agent-gateway/tests/settlement.test.mjs)
 [![Live Contract: emet-v2-mwab6fsl.testnet](https://img.shields.io/badge/NEAR_Testnet-emet--v2--mwab6fsl.testnet-10b981.svg)](https://testnet.nearblocks.io/address/emet-v2-mwab6fsl.testnet)
 [![NEAR MPC: v1.signer-prod.testnet (v3.18.0)](https://img.shields.io/badge/NEAR_MPC-v1.signer--prod.testnet_(v3.18.0)-f59e0b.svg)](./crates/mpc-verifier/src/lib.rs)
 [![Threat Model: 18 Vectors](https://img.shields.io/badge/Threat_Model-18_Vectors-ef4444.svg)](./THREAT_MODEL.md)
@@ -71,7 +71,7 @@ cd emet
 npm test
 ```
 **See:**
-* `pass 12 / fail 0` (`exit code 0`): runs internal Rust audit assertions AND invokes native NEAR VM exports (`init`, `update_mission`, `initiate_intent`, `on_foreign_tx_verified`, `get_agent_ledger`) directly inside the compiled `.wasm` binary, verifies SHA-256 parity with `near/mpc` v3.18.0 snapshots, proves `HTTP 403` isolation between Owner and Agent tokens, blocks freeform scam prompts (`"Send $50,000 to scammer.near"`), verifies the Vercel handler (`api/index.mjs`), and checks `emet-v2-mwab6fsl.testnet` receipts.
+* `pass 13 / fail 0` (`exit code 0`): runs internal Rust audit assertions AND invokes native NEAR VM exports (`init`, `update_mission`, `initiate_intent`, `on_foreign_tx_verified`, `get_agent_ledger`) directly inside the compiled `.wasm` binary, verifies SHA-256 parity with `near/mpc` v3.18.0 snapshots, proves `HTTP 403` isolation between Owner and Agent tokens, blocks freeform scam prompts (`"Send $50,000 to scammer.near"`), verifies positive non-zero amounts and 24h epoch cap rollover, verifies the Vercel handler (`api/index.mjs`), and checks `emet-v2-mwab6fsl.testnet` receipts.
 
 ### 2. Open the Landing Page & Live Two-Brain Cockpit
 **Do:**
