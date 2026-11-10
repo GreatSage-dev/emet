@@ -1140,26 +1140,34 @@ export const LANDING_HTML = `<!DOCTYPE html>
           <article class="bento-cell">
             <div class="bento-head">
               <h3>
-                100% refunds when swaps fail
-                <span>verified live on NEAR Testnet</span>
+                100% refunds &amp; on-chain rejections
+                <span>9 verified NEAR Testnet txs</span>
               </h3>
-              <p>If a cross-chain trade stalls or fails, Emet snaps 100% of locked funds back to your agent’s available balance automatically—proven live on NEAR Testnet with real MPC signatures.</p>
+              <p>Even if the web UI is bypassed, the Rust smart contract blocks scam tokens, 99% slippage drains, and agent tampering on-chain, and refunds 100% when swaps fail.</p>
             </div>
             <div class="bento-stage dot-surface">
               <div class="artifact-card">
-                <div class="mono" style="font-size: 11.5px; color: var(--accent); margin-bottom: 10px;">live on-chain receipt · emet-v1-mw6z2crp.testnet</div>
-                <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--body); margin-bottom: 4px;">
-                  <span>Failed foreign tx refund</span>
-                  <a href="https://testnet.nearblocks.io/txns/3ugCAzrDSX8dp5Tjb4h1BsGm3gMZLJjh9YnL9MixQstF" target="_blank" rel="noopener" class="mono" style="color: var(--ink); text-decoration: underline;">3ugCAzrD…QstF ↗</a>
+                <div class="mono" style="font-size: 11.5px; color: var(--accent); margin-bottom: 10px;">live on-chain receipt · emet-v2-mwab6fsl.testnet</div>
+                <div style="display: flex; justify-content: space-between; font-size: 12.5px; color: var(--body); margin-bottom: 4px;">
+                  <span>SCAMCOIN blocked on-chain</span>
+                  <a href="https://testnet.nearblocks.io/txns/DrcMVnrvZhw8Ehov3x7JDvyve9zSTco6K5XFm1X5YhyY" target="_blank" rel="noopener" class="mono" style="color: var(--rose); text-decoration: underline;">ERR_MISSION_ASSET_BLOCKED ↗</a>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--body); margin-bottom: 12px;">
-                  <span>Finalized BNB MPC settlement</span>
-                  <a href="https://testnet.nearblocks.io/txns/7zAvP3HhLVr4FsqbJ8LtzwhjZyjmggJQsR8JZaYmCPUX" target="_blank" rel="noopener" class="mono" style="color: var(--ink); text-decoration: underline;">7zAvP3Hh…CPUX ↗</a>
+                <div style="display: flex; justify-content: space-between; font-size: 12.5px; color: var(--body); margin-bottom: 4px;">
+                  <span>99% slippage drain blocked</span>
+                  <a href="https://testnet.nearblocks.io/txns/8iUMeLtjNdFpNH2nPBi5CDsSRCtTg8TNTjbb41BwuhiG" target="_blank" rel="noopener" class="mono" style="color: var(--rose); text-decoration: underline;">ERR_SLIPPAGE_COLLAR ↗</a>
                 </div>
-                <div class="mono" style="font-size: 28px; font-weight: 600; letter-spacing: -0.03em; color: var(--ink);">
+                <div style="display: flex; justify-content: space-between; font-size: 12.5px; color: var(--body); margin-bottom: 4px;">
+                  <span>Failed foreign tx refund (0.15 NEAR)</span>
+                  <a href="https://testnet.nearblocks.io/txns/9MAZxcuYurVzPhr6Drwo5W4WqtZN7kW4CZz82wEUwyxa" target="_blank" rel="noopener" class="mono" style="color: var(--ink); text-decoration: underline;">9MAZxcuY…wyxa ↗</a>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 12.5px; color: var(--body); margin-bottom: 10px;">
+                  <span>Finalized BNB Block #141870103 MPC</span>
+                  <a href="https://testnet.nearblocks.io/txns/FaCMuGXzprkQrLFNKM4MZVeXyHApXK55jWfCMbvHKKte" target="_blank" rel="noopener" class="mono" style="color: var(--emerald); text-decoration: underline;">FaCMuGXz…KKte ↗</a>
+                </div>
+                <div class="mono" style="font-size: 24px; font-weight: 600; letter-spacing: -0.03em; color: var(--ink);">
                   100% Principal Returned
                 </div>
-                <div style="font-size: 12.5px; color: var(--slate);">when destination finality fails (modeled tighter risk buffers on verified fills)</div>
+                <div style="font-size: 12px; color: var(--slate);">9 live NearBlocks txs · 5 attacks rejected · 11 MPC nodes settled BNB</div>
               </div>
             </div>
           </article>
@@ -1301,7 +1309,7 @@ export const LANDING_HTML = `<!DOCTYPE html>
       <div><strong style="color: var(--ink);">EMET (אמת)</strong> · Safe Wallet Guardrails &amp; Escrow for AI Agents on NEAR</div>
       <div style="display: flex; gap: 20px;">
         <a href="/cockpit" style="color: var(--ink); font-weight: 500;">Live Cockpit</a>
-        <a href="https://testnet.nearblocks.io/address/emet-v1-mw6z2crp.testnet" target="_blank" rel="noopener" class="mono">NEAR Testnet Contract ↗</a>
+        <a href="https://testnet.nearblocks.io/address/emet-v2-mwab6fsl.testnet" target="_blank" rel="noopener" class="mono">NEAR Testnet Contract ↗</a>
         <a href="/api/testnet/status" class="mono">On-Chain JSON</a>
       </div>
     </div>

@@ -950,16 +950,26 @@ export const COCKPIT_HTML = `<!DOCTYPE html>
 
   <!-- LIVE NEAR TESTNET ON-CHAIN PROOF BAR -->
   <div class="band">
-    <div class="rail-box" style="padding: 10px 24px; background: #F8F8F8; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; font-size: 12.5px;">
-      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-        <span class="badge badge-allow" id="testnetLiveBadge">LIVE ON NEAR TESTNET</span>
-        <span class="mono" id="testnetContractLabel" style="font-weight: 600; color: var(--ink);">emet-v1-mw6z2crp.testnet</span>
-        <span style="color: var(--slate);">· Verified by <span class="mono">v1.signer-prod.testnet</span> (v3.18.0, Domain 3)</span>
+    <div class="rail-box" style="padding: 12px 24px; background: #F8F8F8; display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <span class="badge badge-allow" id="testnetLiveBadge">LIVE ON NEAR TESTNET</span>
+          <span class="mono" id="testnetContractLabel" style="font-weight: 600; color: var(--ink);">emet-v2-mwab6fsl.testnet</span>
+          <span style="color: var(--slate);">· Verified by <span class="mono">v1.signer-prod.testnet</span> (v3.18.0, Domain 3)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;" class="mono">
+          <a id="testnetContractLink" href="https://testnet.nearblocks.io/address/emet-v2-mwab6fsl.testnet" target="_blank" rel="noopener" style="color: var(--accent); text-decoration: none;">Contract Explorer ↗</a>
+          <a id="testnetMpcSettleLink" href="https://testnet.nearblocks.io/txns/FaCMuGXzprkQrLFNKM4MZVeXyHApXK55jWfCMbvHKKte" target="_blank" rel="noopener" style="color: var(--emerald); text-decoration: none;">MPC Settled Tx ↗</a>
+          <a id="testnetRefundLink" href="https://testnet.nearblocks.io/txns/9MAZxcuYurVzPhr6Drwo5W4WqtZN7kW4CZz82wEUwyxa" target="_blank" rel="noopener" style="color: var(--ink); text-decoration: none;">100% Refund Tx ↗</a>
+        </div>
       </div>
-      <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;" class="mono">
-        <a id="testnetContractLink" href="https://testnet.nearblocks.io/address/emet-v1-mw6z2crp.testnet" target="_blank" rel="noopener" style="color: var(--accent); text-decoration: none;">Contract Explorer ↗</a>
-        <a id="testnetMpcSettleLink" href="https://testnet.nearblocks.io/txns/7zAvP3HhLVr4FsqbJ8LtzwhjZyjmggJQsR8JZaYmCPUX" target="_blank" rel="noopener" style="color: var(--emerald); text-decoration: none;">MPC Settled Tx ↗</a>
-        <a id="testnetRefundLink" href="https://testnet.nearblocks.io/txns/3ugCAzrDSX8dp5Tjb4h1BsGm3gMZLJjh9YnL9MixQstF" target="_blank" rel="noopener" style="color: var(--ink); text-decoration: none;">100% Refund Tx ↗</a>
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--rail); padding-top: 8px;" class="mono">
+        <span style="color: var(--slate);">On-Chain Attacks Blocked:</span>
+        <a id="testnetScamcoinLink" href="https://testnet.nearblocks.io/txns/DrcMVnrvZhw8Ehov3x7JDvyve9zSTco6K5XFm1X5YhyY" target="_blank" rel="noopener" style="color: var(--rose); text-decoration: none;">SCAMCOIN Blocked ↗</a>
+        <a id="testnetSlippageLink" href="https://testnet.nearblocks.io/txns/8iUMeLtjNdFpNH2nPBi5CDsSRCtTg8TNTjbb41BwuhiG" target="_blank" rel="noopener" style="color: var(--rose); text-decoration: none;">99% Drain Blocked ↗</a>
+        <a id="testnetOwnerOnlyLink" href="https://testnet.nearblocks.io/txns/2uTMJzVuLQ4hUGdEVWVFLT4fGHU6Dak67HijWaisADwt" target="_blank" rel="noopener" style="color: var(--rose); text-decoration: none;">Agent Cap Hijack Blocked ↗</a>
+        <a id="testnetFullAccessLink" href="https://testnet.nearblocks.io/txns/A1G6NJXx1nq5dKN1PsSRPS1mGeGzKC26ut2CFmA4zoPX" target="_blank" rel="noopener" style="color: var(--rose); text-decoration: none;">FullAccess Key Blocked ↗</a>
+        <a id="testnetNonceLink" href="https://testnet.nearblocks.io/txns/Am3FRACf9UmW47m68PnvE2fzSxypNo1dMtpq6Yi5BgcU" target="_blank" rel="noopener" style="color: var(--rose); text-decoration: none;">Duplicate Nonce Blocked ↗</a>
       </div>
     </div>
   </div>
@@ -1686,6 +1696,17 @@ export const COCKPIT_HTML = `<!DOCTYPE html>
         if (t.transactions?.crossContractMpcFailureAtomicRefund?.explorerUrl) {
           document.getElementById("testnetRefundLink").href =
             t.transactions.crossContractMpcFailureAtomicRefund.explorerUrl;
+        }
+        const txLinks = [
+          ["testnetScamcoinLink", t.transactions?.adversarialScamcoinSwapRejected?.explorerUrl],
+          ["testnetSlippageLink", t.transactions?.adversarialSlippageDrainRejected?.explorerUrl],
+          ["testnetOwnerOnlyLink", t.transactions?.adversarialAgentMissionHijackRejected?.explorerUrl],
+          ["testnetFullAccessLink", t.transactions?.adversarialFullAccessKeyRejected?.explorerUrl],
+          ["testnetNonceLink", t.transactions?.adversarialDuplicateNonceRejected?.explorerUrl],
+        ];
+        for (const [elId, url] of txLinks) {
+          const el = document.getElementById(elId);
+          if (el && url) el.href = url;
         }
         document.getElementById("testnetLiveBadge").textContent =
           t.source === "live-near-testnet-rpc" ? "LIVE ON NEAR TESTNET (RPC VERIFIED)" : "DEPLOYED ON NEAR TESTNET";
