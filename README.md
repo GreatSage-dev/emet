@@ -3,9 +3,10 @@
 ### Safe Spending Cards & Outcome-Verified Escrow for AI Agents on NEAR
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981.svg)](./LICENSE)
-[![Tests: 9/9 Passing (Exit Code 0)](https://img.shields.io/badge/Tests-9%2F9_Passing_(Code_0)-10b981.svg)](./packages/agent-gateway/tests/settlement.test.mjs)
-[![Live Contract: emet-v1-mw6z2crp.testnet](https://img.shields.io/badge/NEAR_Testnet-emet--v1--mw6z2crp.testnet-10b981.svg)](https://testnet.nearblocks.io/address/emet-v1-mw6z2crp.testnet)
+[![Tests: 12/12 Passing (Exit Code 0)](https://img.shields.io/badge/Tests-12%2F12_Passing_(Code_0)-10b981.svg)](./packages/agent-gateway/tests/settlement.test.mjs)
+[![Live Contract: emet-v2-mwab6fsl.testnet](https://img.shields.io/badge/NEAR_Testnet-emet--v2--mwab6fsl.testnet-10b981.svg)](https://testnet.nearblocks.io/address/emet-v2-mwab6fsl.testnet)
 [![NEAR MPC: v1.signer-prod.testnet (v3.18.0)](https://img.shields.io/badge/NEAR_MPC-v1.signer--prod.testnet_(v3.18.0)-f59e0b.svg)](./crates/mpc-verifier/src/lib.rs)
+[![Threat Model: 18 Vectors](https://img.shields.io/badge/Threat_Model-18_Vectors-ef4444.svg)](./THREAT_MODEL.md)
 [![Tracks: security | agents | business](https://img.shields.io/badge/Tracks-security_%7C_agents_%7C_business-3b82f6.svg)](./HACKATHON.md)
 
 **EMET gives an AI agent a wallet that cannot be tricked by malicious webpages or lose principal when a cross-chain payment fails.** One brain reads untrusted websites and invoices, a clean second brain checks the live NEAR account and your spending rules before signing with a method-locked key, and an on-chain NEAR contract holds the money in escrow until NEAR's threshold MPC network proves the transfer finalized on the destination chain.
@@ -40,17 +41,21 @@ Race cars have brakes so drivers can take corners at full speed instead of crawl
 
 ## Live NEAR Testnet Deployment & On-Chain Receipts
 
-* **Deployed Smart Contract:** [`emet-v1-mw6z2crp.testnet`](https://testnet.nearblocks.io/address/emet-v1-mw6z2crp.testnet) (`code_hash`: `3FuGj5yFKe3tqf2AtzbjLV1X678bSKzfR7jQ7HJaeya4`)
+* **Deployed Smart Contract:** [`emet-v2-mwab6fsl.testnet`](https://testnet.nearblocks.io/address/emet-v2-mwab6fsl.testnet) (`code_hash`: `CxYkUVjYqvxU3fyf8pk129cgxioCtFBH1NRCXZmeUjrF`)
 * **Target MPC Signer:** [`v1.signer-prod.testnet`](https://testnet.nearblocks.io/address/v1.signer-prod.testnet) (`v3.18.0`, `DomainId(3)` ForeignTx CaitSith threshold `11`)
-* **Machine-Readable Receipt:** [`testnet-deployment.json`](./testnet-deployment.json)
+* **Machine-Readable Receipt & Threat Matrix:** [`testnet-deployment.json`](./testnet-deployment.json) · [`THREAT_MODEL.md`](./THREAT_MODEL.md)
 
 | Proof Step | NEAR Testnet Transaction | Verified On-Chain Result |
 | :--- | :--- | :--- |
-| **1. Deploy WASM & Initialize** | [`FLV6hg98dgz5Fr1SFSASkRbD5mCjpzPoGm6DtQ2YGvs6`](https://testnet.nearblocks.io/txns/FLV6hg98dgz5Fr1SFSASkRbD5mCjpzPoGm6DtQ2YGvs6) | Deployed `283 KB` Rust WASM contract and bound `v1.signer-prod.testnet` (`DomainId(3)`) |
-| **2. Add Scoped `FunctionCall` Key** | [`C8uotjdyR67RKjHW7TuYq3sReWJ47SAo64DVdj354pEX`](https://testnet.nearblocks.io/txns/C8uotjdyR67RKjHW7TuYq3sReWJ47SAo64DVdj354pEX) | Added `ed25519:ETitme5B...` scoped strictly to `initiate_intent` and escrowed `0.50 NEAR` |
-| **3. Adversarial `FullAccess` Key** | [`3GULCtCNgWaeqbDUipNjZLxYsRpG1VWenTg35yEeYeev`](https://testnet.nearblocks.io/txns/3GULCtCNgWaeqbDUipNjZLxYsRpG1VWenTg35yEeYeev) | **Rejected on-chain (`FullAccessKeyForbiddenForAgent`)** via `signer_account_pk` check |
-| **4. Failed MPC Call -> 100% Refund** | [`3ugCAzrDSX8dp5Tjb4h1BsGm3gMZLJjh9YnL9MixQstF`](https://testnet.nearblocks.io/txns/3ugCAzrDSX8dp5Tjb4h1BsGm3gMZLJjh9YnL9MixQstF) | Cross-contract call to `v1.signer-prod.testnet` failed; `#[private]` callback refunded **`0.15 NEAR` (100%)** to `available_balance` |
-| **5. Finalized BNB Block `#141421132`** | [`7zAvP3HhLVr4FsqbJ8LtzwhjZyjmggJQsR8JZaYmCPUX`](https://testnet.nearblocks.io/txns/7zAvP3HhLVr4FsqbJ8LtzwhjZyjmggJQsR8JZaYmCPUX) | 11 MPC nodes verified BSC Testnet tx `642441b3...` and returned `Secp256k1` signature `03b4b28bf1ff...`; **settled `0.20 NEAR`** |
+| **1. Deploy WASM & Initialize** | [`3R2guw4GDoT2vuSPu7BoEZv3MeFNjDTRw9ph8ibmAdku`](https://testnet.nearblocks.io/txns/3R2guw4GDoT2vuSPu7BoEZv3MeFNjDTRw9ph8ibmAdku) | Deployed `294 KB` Rust WASM, bound `owner_pk_hex` & `v1.signer-prod.testnet` (`DomainId(3)`) |
+| **2. Add Scoped Key & Mission** | [`6TTPsB7fR7ebd83NXGWQ2r2rHVyWcBdeujdsJpQECD3S`](https://testnet.nearblocks.io/txns/6TTPsB7fR7ebd83NXGWQ2r2rHVyWcBdeujdsJpQECD3S) | Added `initiate_intent` FunctionCall key (`1.50 NEAR` gas ceiling), `min_return_bps: 9000`, & `0.50 NEAR` escrow |
+| **3. Attack: `FullAccess` Key** | [`A1G6NJXx1nq5dKN1PsSRPS1mGeGzKC26ut2CFmA4zoPX`](https://testnet.nearblocks.io/txns/A1G6NJXx1nq5dKN1PsSRPS1mGeGzKC26ut2CFmA4zoPX) | **Rejected on-chain (`ERR_FULL_ACCESS_KEY_FORBIDDEN`)** |
+| **4. Attack: Direct `SCAMCOIN` Swap** | [`DrcMVnrvZhw8Ehov3x7JDvyve9zSTco6K5XFm1X5YhyY`](https://testnet.nearblocks.io/txns/DrcMVnrvZhw8Ehov3x7JDvyve9zSTco6K5XFm1X5YhyY) | **Rejected on-chain (`ERR_MISSION_ASSET_BLOCKED`)** even when bypassing UI/gateway |
+| **5. Attack: 99% Slippage Drain** | [`8iUMeLtjNdFpNH2nPBi5CDsSRCtTg8TNTjbb41BwuhiG`](https://testnet.nearblocks.io/txns/8iUMeLtjNdFpNH2nPBi5CDsSRCtTg8TNTjbb41BwuhiG) | **Rejected on-chain (`ERR_SLIPPAGE_COLLAR_VIOLATION`)** (`amount_out: 1` refused) |
+| **6. Attack: Agent Raises Own Cap** | [`2uTMJzVuLQ4hUGdEVWVFLT4fGHU6Dak67HijWaisADwt`](https://testnet.nearblocks.io/txns/2uTMJzVuLQ4hUGdEVWVFLT4fGHU6Dak67HijWaisADwt) | **Rejected on-chain (`ERR_OWNER_KEY_REQUIRED`)** (`update_mission` requires `owner_pk_hex`) |
+| **7. Attack: Stalled-Relayer Retry** | [`Am3FRACf9UmW47m68PnvE2fzSxypNo1dMtpq6Yi5BgcU`](https://testnet.nearblocks.io/txns/Am3FRACf9UmW47m68PnvE2fzSxypNo1dMtpq6Yi5BgcU) | **Rejected on-chain (`ERR_NON_MONOTONIC_NONCE`)** (`2 <= 2` blocked) |
+| **8. Failed MPC Call -> 100% Refund** | [`9MAZxcuYurVzPhr6Drwo5W4WqtZN7kW4CZz82wEUwyxa`](https://testnet.nearblocks.io/txns/9MAZxcuYurVzPhr6Drwo5W4WqtZN7kW4CZz82wEUwyxa) | Cross-contract `v1.signer-prod.testnet` failed; `#[private]` callback refunded **`0.15 NEAR` (100%)** |
+| **9. Finalized BNB Block `#141870103`** | [`FaCMuGXzprkQrLFNKM4MZVeXyHApXK55jWfCMbvHKKte`](https://testnet.nearblocks.io/txns/FaCMuGXzprkQrLFNKM4MZVeXyHApXK55jWfCMbvHKKte) | 11 MPC nodes verified BSC tx `0e56a985...` & returned `Secp256k1` sig `02e7de4c4d...`; **settled `0.20 NEAR`** |
 
 ---
 
@@ -66,7 +71,7 @@ cd emet
 npm test
 ```
 **See:**
-* `pass 9 / fail 0` (`exit code 0`): instantiates the compiled Rust `.wasm` contract inside Node's WebAssembly VM, verifies byte-for-byte SHA-256 parity with `near/mpc` v3.18.0 snapshots, proves `HTTP 403` isolation between Owner and Agent tokens, blocks freeform scam prompts (`"Send $50,000 to scammer.near"`), and checks live `emet-v1-mw6z2crp.testnet` status.
+* `pass 12 / fail 0` (`exit code 0`): runs internal Rust audit assertions AND invokes native NEAR VM exports (`init`, `update_mission`, `initiate_intent`, `on_foreign_tx_verified`, `get_agent_ledger`) directly inside the compiled `.wasm` binary, verifies SHA-256 parity with `near/mpc` v3.18.0 snapshots, proves `HTTP 403` isolation between Owner and Agent tokens, blocks freeform scam prompts (`"Send $50,000 to scammer.near"`), verifies the Vercel handler (`api/index.mjs`), and checks `emet-v2-mwab6fsl.testnet` receipts.
 
 ### 2. Open the Landing Page & Live Two-Brain Cockpit
 **Do:**
@@ -134,8 +139,9 @@ npm run submit:preview
                                             │ initiate_intent (FunctionCall key only)
                                             ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│ LAYER 3 · EMET ON-CHAIN SETTLEMENT KERNEL (`emet-v1-mw6z2crp.testnet`)                  │
+│ LAYER 3 · EMET ON-CHAIN SETTLEMENT KERNEL (`emet-v2-mwab6fsl.testnet`)                  │
 │ • Verifies `signer_account_pk` matches the agent's registered `FunctionCall` public key │
+│ • On-chain firewall rejects `SCAMCOIN`, >slippage drains, and non-owner `update_mission`│
 │ • Enforces monotonic `nonce` and moves capital `available_balance -> in_flight_locked`  │
 │ • Calls `v1.signer-prod.testnet::verify_foreign_transaction` (`DomainId(3)`)            │
 │ • `#[private] on_foreign_tx_verified` callback:                                         │
@@ -150,7 +156,7 @@ Remove NEAR from this design and all three safety guarantees break:
 
 | NEAR Primitive Used | Why Off-Chain Wrappers or Standard EVM EOAs Cannot Replicate It |
 | :--- | :--- |
-| **Native `FunctionCall` Access Keys** | Protocol-enforced key scoping locks the agent's signing key to `emet-v1-mw6z2crp.testnet::initiate_intent` with a `0.60 NEAR` gas ceiling. Even if an attacker steals the agent process memory, that key cannot call `Transfer`, `AddKey`, or `DeployContract`. |
+| **Native `FunctionCall` Access Keys** | Protocol-enforced key scoping locks the agent's signing key to `emet-v2-mwab6fsl.testnet::initiate_intent` with a `1.50 NEAR` gas ceiling. Even if an attacker steals the agent process memory, that key cannot call `Transfer`, `AddKey`, or `DeployContract`. |
 | **Account `code_hash` Inspection via RPC** | Brain 2 queries `view_account` on NEAR before signing to detect whether a receiver has deployed or recently swapped contract WASM, pausing unfamiliar contracts for owner confirmation. |
 | **Threshold MPC Foreign-Tx Verification (`v1.signer-prod.testnet` v3.18.0)** | Allows a NEAR smart contract to verify `SvmFinality::Finalized`, `EvmFinality::Finalized`, and `6+` Bitcoin confirmations across chains via `DomainId(3)` threshold signatures without trusting a centralized bridge relayer. |
 
@@ -164,21 +170,14 @@ Remove NEAR from this design and all three safety guarantees break:
 
 ---
 
-## Honest Scope & Operational Boundaries
+## Honest Scope, Known Failures & Threat Model
 
-* **Structured Rules On-Chain:** The smart contract evaluates exact account IDs, token IDs, atomic amounts, nonces, and basis-point collars. It does not interpret English sentences on-chain.
-* **Market Price Movement:** EMET blocks unapproved tokens, bad return ratios, unverified contracts, and failed cross-chain deliveries. Normal market price changes inside the owner's approved token list and slippage collar remain the owner's market risk.
-* **Function-Call Key Gas Ceiling:** On NEAR, attaching `220 Tgas` for cross-contract MPC verification reserves `~0.251 NEAR` pessimistically upfront. EMET provisions agent keys with a `0.60 NEAR` gas allowance so multiple MPC calls succeed while native `Transfer` actions remain impossible; when gas runs out, the agent pauses until the owner tops up the key.
+See **[`THREAT_MODEL.md`](./THREAT_MODEL.md)** for the full 18-vector attack matrix, every real failure hit while building (including `NotEnoughAllowance` on our first `0.25 NEAR` Testnet deploy, a gas-ordering bug on our initial nonce test `DJeCoqXj...`, `near/mpc` Borsh ordering fixes, and Vercel `BUILD_UTILS_SPAWN_101`), and the exact line between what runs on-chain vs. in the Node gateway today:
+
+* **Structured Rules On-Chain:** The smart contract evaluates exact account IDs, token IDs, atomic amounts, nonces, and basis-point collars (`allowed_output_tokens`, `min_return_bps`, `owner_pk_hex`). It does not interpret English sentences on-chain.
+* **What Runs Where:** Core budget locks, `SCAMCOIN` / slippage checks, owner-key checks, nonces, and `DomainId(3)` MPC callbacks run **on-chain in Rust** on `emet-v2-mwab6fsl.testnet`. Natural-language prompt extraction, NEAR RPC `code_hash` inspection, and `x402` quote parsing run in the **Node / Vercel gateway** (`packages/agent-gateway`), not inside a hardware TEE `ecrecover` check.
+* **Market Price Movement:** Normal market price moves inside the owner's approved token list and minimum return collar remain the owner's trading risk.
 * **Modeled Spread Comparison:** `demo:quote` pairs live 1Click API quotes (`liveQuoteAmountOut`) with an explicitly labeled `illustrative_risk_buffer_comparison` (`200 bps` unhedged buffer vs. `10 bps` verified buffer) rather than claiming live market-maker fee repricing today.
-
----
-
-## Engineering Pivots (What Broke & How We Fixed It)
-
-1. **Scrapping Single-Brain Prompt Filters for the Glass Wall:** Prompt-filtering an LLM that still holds signing authority fails whenever an attacker encodes instructions indirectly. Splitting the reader (`Brain 1`) from the deterministic policy verifier (`Brain 2`) across a typed JSON boundary removed prose from the signing path altogether.
-2. **Matching `near/mpc` v3.18.0 Binary Wire Order Byte-for-Byte:** Inspecting `near-mpc-contract-interface` revealed two subtle Borsh rules: `SvmExtractor` discriminants start at `1` (`InnerInstruction = 1`, `AccountState = 2`), and `EvmRpcRequest` encodes `(tx_id, extractors, finality)` whereas `SvmRpcRequest` encodes `(tx_id, finality, extractors)`. Both our Rust contract and Node SDK are locked to the official `near/mpc` SHA-256 test snapshots (`f53a1a86...`, `2ab97999...`, `08e426dc...`).
-3. **Splitting Human Owner Keys From Agent Session Keys:** During adversarial testing (`ASHBORN-C6BB9210` + pre-submission premortem), we verified cross-tenant BOLA isolation (`HTTP 403`), patched Mass Assignment on profile updates, and separated `X-Owner-Authorization` from the agent's bearer token so a compromised agent process cannot rewrite its own Mission caps or approve its own `WARN` pauses.
-4. **Tuning Testnet `FunctionCall` Gas Allowances:** Our first live testnet deployment with a `0.25 NEAR` allowance and `250 Tgas` failed with `NotEnoughAllowance` (`0.250919 NEAR` pessimistic reservation). Adjusting to `220 Tgas` with a `0.60 NEAR` gas-only allowance enabled live multi-transaction MPC settlement on `emet-v1-mw6z2crp.testnet`.
 
 ---
 
@@ -186,12 +185,11 @@ Remove NEAR from this design and all three safety guarantees break:
 
 | Check | Command | Result / Cryptographic Digest | Status |
 | :--- | :--- | :--- | :--- |
-| Rust `.wasm` Audit + NEAR VM Exports (`init`, `get_contract_info`) | `npm test` | `wasm_run_emet_verification_suite() === 1` (`283,036` bytes) | **PASS (`code 0`)** |
-| Solana `ForeignTxSignPayload::V1` Snapshot Parity | `npm test` | `f53a1a864fa9ce51d50349b2e5fe38ff23e45b25b20038d405c12316f9bf05b1` | **PASS (`code 0`)** |
-| Ethereum `ForeignTxSignPayload::V1` Snapshot Parity | `npm test` | `2ab97999d1e015730271c7d6cbb298af76fd1de7af81926b42a8877bc4f5794e` | **PASS (`code 0`)** |
-| Bitcoin `ForeignTxSignPayload::V1` Snapshot Parity | `npm test` | `08e426dcd6eb98cc5eb5280d50f9c14e024f4a531bd5e09314ac4ae8bb07c9be` | **PASS (`code 0`)** |
-| Live BSC Testnet Block `#141421132` Threshold Signature | `testnet` | `9a97f0116568c62c8f8cd447215848fb42c6758ec0ce6857947fe01d4e55cf49` | **SETTLED ON-CHAIN** |
-| Owner/Agent Privilege Split + BOLA + Freeform Scam Block | `npm test` | `HTTP 403` on self-escalation; `scammer.near` `$50,000` -> `BLOCK` | **PASS (`code 0`)** |
+| Rust `.wasm` Audit + Full NEAR VM ABI Firewall (`init` -> `on_foreign_tx_verified`) | `npm test` | `wasm_run_emet_verification_suite() === 1` (`294,179` bytes) | **PASS (`code 0`)** |
+| Solana / EVM / Bitcoin `ForeignTxSignPayload::V1` Snapshots | `npm test` | `f53a1a86...` / `2ab97999...` / `08e426dc...` byte parity | **PASS (`code 0`)** |
+| 5 Live On-Chain Attack Rejections (`SCAMCOIN`, Slippage, Cap Hijack, Key, Nonce) | `testnet` | `ERR_MISSION_ASSET_BLOCKED`, `ERR_SLIPPAGE_COLLAR_VIOLATION`, etc. | **REJECTED ON-CHAIN** |
+| Live BSC Testnet Block `#141870103` Threshold Signature | `testnet` | `dc443d1d59f90631cf540a903275829b474a0a244ca74c4ef65d55a391de7c32` | **SETTLED ON-CHAIN** |
+| Owner/Agent Privilege Split + BOLA + Freeform Scam + Vercel Handler | `npm test` | `HTTP 403` on self-escalation; `api/index.mjs` pre-parsed body | **PASS (`code 0`)** |
 
 ---
 

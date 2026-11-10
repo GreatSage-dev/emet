@@ -26,11 +26,10 @@ const VALID_TRACKS = new Set([
 
 export function buildEmetIdeaDescription() {
   return (
-    "EMET (אמת) lets autonomous AI agents spend safely on NEAR without getting drained by prompt injection, worthless token swaps, or stalled cross-chain bridges. " +
-    "Deployed live on NEAR Testnet (`emet-v1-mw6z2crp.testnet`), EMET enforces a Two-Brain Clean-Room + On-Chain Escrow architecture: " +
-    "(1) Two-Brain Glass Wall & Live NEAR RPC Probe: Brain 1 reads untrusted webpages, invoices, and A2A `x402` quotes, while only typed numbers, token IDs, and receiver accounts cross the Glass Wall into Brain 2—which probes NEAR RPC `view_account` (`code_hash` & account state) and checks Owner-only Mission bounds (allowed output tokens, minimum return collar, spend caps, and shared counterparty blocklist). " +
-    "(2) Scoped FunctionCall Keys & Owner/Agent Separation: Autonomous agents are cryptographically restricted on-chain (`signer_account_pk`) to a NEAR `FunctionCall` key scoped strictly to `initiate_intent` (`FullAccess` keys and self-approved policy overrides are deterministically rejected). " +
-    "(3) Outcome-Verified MPC Escrow (`v1.signer-prod.testnet` v3.18.0): Approved payments lock in `in_flight_locked` escrow and invoke `v1.signer-prod.testnet::verify_foreign_transaction` (`DomainId(3)`). Funds settle ONLY after threshold MPC nodes verify destination chain finality (`Finalized`), or snap 100% back to `available_balance` via `#[private]` callback if the foreign tx fails."
+    "EMET (אמת) lets autonomous AI agents pay outside vendors and swap across chains without getting emptied by prompt injection, worthless tokens, or stalled bridges. " +
+    "Live on NEAR Testnet (`emet-v2-mwab6fsl.testnet`) with 9 verifiable NearBlocks transactions: " +
+    "(1) Two-Brain Glass Wall & On-Chain Firewall: Brain 1 reads messy webpages and `x402` quotes while stripping prose before Brain 2 probes NEAR RPC `view_account`. Even if someone bypasses the UI and hits the smart contract directly, our Rust WASM contract refuses `SCAMCOIN` swaps (`ERR_MISSION_ASSET_BLOCKED`), 99% slippage drains (`ERR_SLIPPAGE_COLLAR_VIOLATION`), unauthorized cap changes (`ERR_OWNER_KEY_REQUIRED`), duplicate retries (`ERR_NON_MONOTONIC_NONCE`), and `FullAccess` keys (`ERR_FULL_ACCESS_KEY_FORBIDDEN`). " +
+    "(2) Outcome-Verified MPC Escrow (`v1.signer-prod.testnet` DomainId 3): Payments lock in `in_flight_locked` escrow until 11 MPC nodes verify foreign-chain finality (proven live on BSC Block #141870103), or automatically refund 100% (`0.15 NEAR` refunded live) via `#[private]` callback when delivery fails."
   );
 }
 
@@ -102,7 +101,7 @@ export function createDraftPayload(overrides = {}) {
     email: overrides.email || "builder@emet.near",
     size: overrides.size || "1",
     tracks: ["security", "agents", "business"],
-    nearAddress: overrides.nearAddress || "emet-v1-mw6z2crp.testnet",
+    nearAddress: overrides.nearAddress || "emet-v2-mwab6fsl.testnet",
     projectUrl: overrides.projectUrl || "https://github.com/GreatSage-dev/emet",
     demoUrl: overrides.demoUrl || "https://x.com/NEARProtocol/status/1234567890123456789",
     idea: buildEmetIdeaDescription(),
