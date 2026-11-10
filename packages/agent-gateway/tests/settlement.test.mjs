@@ -677,18 +677,25 @@ describe("Emet Gateway HTTP Server & Ashborn Security Hardening (OWASP API)", ()
       assert.equal(benignData.role, "agent");
       assert.equal(benignData.isAdmin, false);
 
-      // 5. Editorial Landing Page serves HTML at GET / and Flight Cockpit serves at GET /cockpit
+      // 5. Editorial Landing Page serves HTML at GET / and 5-Screen Product App serves at GET /cockpit
       const uiRes = await fetch(`${baseUrl}/`);
       assert.equal(uiRes.status, 200);
       const uiHtml = await uiRes.text();
-      assert.match(uiHtml, /Let AI Agents Spend/);
-      assert.match(uiHtml, /Without Getting/);
+      assert.match(uiHtml, /Let AI agents spend without getting robbed\./);
+      assert.match(uiHtml, /emet-v2-mwab6fsl\.testnet/);
 
       const cockpitRes = await fetch(`${baseUrl}/cockpit`);
       assert.equal(cockpitRes.status, 200);
       const cockpitHtml = await cockpitRes.text();
-      assert.match(cockpitHtml, /EMET<span>Cockpit<\/span>/);
-      assert.match(cockpitHtml, /Test a Payment/);
+      assert.match(cockpitHtml, /A wallet your agent can&#39;t empty\.|A wallet your agent can't empty\./);
+      assert.match(cockpitHtml, /Six ways to rob an agent\. Six refusals\./);
+      assert.match(cockpitHtml, /Don&#39;t trust this page\. Ask the chain\.|Don't trust this page\. Ask the chain\./);
+      assert.doesNotMatch(cockpitHtml, /pick_a_test/);
+
+      const wasmRes = await fetch(`${baseUrl}/emet_settlement_contract.wasm`);
+      assert.equal(wasmRes.status, 200);
+      const wasmBytes = Buffer.from(await wasmRes.arrayBuffer());
+      assert.ok(wasmBytes.length > 100_000);
 
       // 6. Dual-Brain API blocks SCAMCOIN & x402 one-way drains, pauses WARN for OutLayer confirm, and locks ALLOW
       const scamRes = await fetch(`${baseUrl}/api/dual-brain/evaluate`, {

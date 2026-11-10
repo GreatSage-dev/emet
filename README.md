@@ -41,7 +41,7 @@ Race cars have brakes so drivers can take corners at full speed instead of crawl
 
 ## Live NEAR Testnet Deployment & On-Chain Receipts
 
-* **Deployed Smart Contract:** [`emet-v2-mwab6fsl.testnet`](https://testnet.nearblocks.io/address/emet-v2-mwab6fsl.testnet) (`code_hash`: `CxYkUVjYqvxU3fyf8pk129cgxioCtFBH1NRCXZmeUjrF`)
+* **Deployed Smart Contract:** [`emet-v2-mwab6fsl.testnet`](https://testnet.nearblocks.io/address/emet-v2-mwab6fsl.testnet) (`code_hash`: `DgkPe1dqrknBUo4VWQMxCHAq7JDF3WHhUcRkRAv7w5kb`)
 * **Target MPC Signer:** [`v1.signer-prod.testnet`](https://testnet.nearblocks.io/address/v1.signer-prod.testnet) (`v3.18.0`, `DomainId(3)` ForeignTx CaitSith threshold `11`)
 * **Machine-Readable Receipt & Threat Matrix:** [`testnet-deployment.json`](./testnet-deployment.json) · [`THREAT_MODEL.md`](./THREAT_MODEL.md)
 

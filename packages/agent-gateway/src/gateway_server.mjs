@@ -161,9 +161,22 @@ export function createEmetRequestHandler({
       return;
     }
 
-    if (method === "GET" && pathname === "/cockpit") {
+    if (method === "GET" && (pathname === "/cockpit" || pathname === "/app")) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(COCKPIT_HTML);
+      return;
+    }
+
+    // Published contract binary, re-hashed by the browser on /cockpit#verify
+    if (method === "GET" && pathname === "/emet_settlement_contract.wasm") {
+      const wasmPath = path.resolve(__dirname, "../../../artifacts/emet_settlement_contract.wasm");
+      if (!fs.existsSync(wasmPath)) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "artifacts/emet_settlement_contract.wasm not found" }));
+        return;
+      }
+      res.writeHead(200, { "Content-Type": "application/wasm" });
+      res.end(fs.readFileSync(wasmPath));
       return;
     }
 

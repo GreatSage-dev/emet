@@ -2,7 +2,7 @@
   "network": "testnet",
   "rpcUrl": "https://test.rpc.fastnear.com",
   "contractId": "emet-v2-mwab6fsl.testnet",
-  "codeHash": "CxYkUVjYqvxU3fyf8pk129cgxioCtFBH1NRCXZmeUjrF",
+  "codeHash": "DgkPe1dqrknBUo4VWQMxCHAq7JDF3WHhUcRkRAv7w5kb",
   "deployedAtIso": "2026-11-10T06:34:00.744Z",
   "mpcSignerContractId": "v1.signer-prod.testnet",
   "mpcSignerVersion": "3.18.0",
@@ -60,6 +60,11 @@
       "explorerUrl": "https://testnet.nearblocks.io/txns/FaCMuGXzprkQrLFNKM4MZVeXyHApXK55jWfCMbvHKKte",
       "bnbTestnetBlockNumber": 141870103,
       "bnbTestnetTxIdHex": "0e56a985b40ca301331be599c04ba5a68e6961b17136b1b9d9ce9c36d5142d14"
+    },
+    "codeUpgrade": {
+      "txHash": "8zQBygqnXpincxebeczR26Zm3Tp1FsS2JQc7wSNVDaVS",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/8zQBygqnXpincxebeczR26Zm3Tp1FsS2JQc7wSNVDaVS",
+      "note": "Code-only upgrade to the bundled artifact (error-prefix fix). State and receipts unchanged."
     }
   },
   "verifiedOnChainState": {
@@ -124,5 +129,6 @@
         "mpc_signature": "{\"payload_hash\":\"dc443d1d59f90631cf540a903275829b474a0a244ca74c4ef65d55a391de7c32\",\"signature\":{\"scheme\":\"Secp256k1\",\"big_r\":{\"affine_point\":\"02e7de4c4dff0de67fc66accda024e7cbd54c5cb3ccd5391eed0d944a2298fec0f\"},\"s\":{\"scalar\":\"005ed1fc53cb192a73855ed178f4fd39e4162043b1c4cfc08ce1baffdc786a80\"},\"recovery_id\":1}}"
       }
     }
-  }
+  },
+  "previousCodeHash": "CxYkUVjYqvxU3fyf8pk129cgxioCtFBH1NRCXZmeUjrF"
 }

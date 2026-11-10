@@ -6,7 +6,7 @@
   "cleanUrls": true,
   "functions": {
     "api/index.mjs": {
-      "includeFiles": "testnet-deployment.json"
+      "includeFiles": "{testnet-deployment.json,packages/agent-gateway/src/ui/**}"
     }
   },
   "rewrites": [

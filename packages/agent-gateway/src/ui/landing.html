@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EMET · Let AI agents spend without getting robbed</title>
+<meta name="description" content="EMET keeps your AI agent's budget inside a NEAR smart contract that enforces your spending rules on-chain and holds cross-chain payments in escrow until delivery is verified.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&family=Instrument+Serif&display=swap" rel="stylesheet">
+<style>/*EMET_CSS*/</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="mark" href="/"><b>emet</b><span>agent spending rules</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="/cockpit#vault">Vault</a>
+      <a href="/cockpit#pay">Pay</a>
+      <a href="/cockpit#break">Break it</a>
+      <a href="/cockpit#verify">Verify</a>
+      <a href="/cockpit#connect">Connect</a>
+    </nav>
+    <a class="btn small" href="/cockpit">Open app</a>
+  </div>
+</header>
+
+<main>
+  <section class="screen">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <h1 class="display">Let AI agents spend without getting robbed.</h1>
+          <p class="lede">Give your AI agent a spending budget on NEAR. Even if a scammer tricks the AI with a fake invoice or hidden webpage text, the contract blocks the payment before a cent leaves.</p>
+          <div class="actions" style="margin-top:28px">
+            <a class="btn" href="/cockpit#vault">Open the vault</a>
+            <a class="btn ghost" href="/cockpit#break">Try to break it</a>
+            <a class="btn ghost" href="/cockpit#verify">Verify on-chain</a>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Live vault on NEAR testnet</h3>
+          <dl class="rows" style="margin-top:14px">
+            <div class="row"><dt>Contract</dt><dd><a class="mono" href="https://testnet.nearblocks.io/address/emet-v2-mwab6fsl.testnet" target="_blank" rel="noopener">emet-v2-mwab6fsl.testnet</a></dd></div>
+            <div class="row"><dt>Compiled WASM</dt><dd class="mono">DgkPe1dq…w5kb (294 KB)</dd></div>
+            <div class="row"><dt>Cross-chain signer</dt><dd><a class="mono" href="https://testnet.nearblocks.io/address/v1.signer-prod.testnet" target="_blank" rel="noopener">v1.signer-prod.testnet</a></dd></div>
+            <div class="row"><dt>Agent key type</dt><dd>Limited <span class="mono">FunctionCall</span> key (1.50 NEAR gas ceiling)</dd></div>
+            <div class="row"><dt>Minimum return rule</dt><dd>90% collar enforced inside the contract</dd></div>
+            <div class="row"><dt>On-chain attacks refused</dt><dd><span class="tag ok">6 of 6 refused on NEAR</span></dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="block rule-top">
+        <div class="block-head">
+          <div>
+            <h2 class="section">Why normal AI wallets get drained</h2>
+            <p class="section-note">If an AI agent holds a normal wallet key and reads the open web, one bad webpage or shady payment link can talk it into sending everything away.</p>
+          </div>
+        </div>
+        <div class="split" style="margin-top:24px">
+          <div class="panel">
+            <h3>Without EMET</h3>
+            <dl class="rows" style="margin-top:12px">
+              <div class="row"><dt>1. One brain does everything</dt><dd>The same AI that reads untrusted emails and webpages also decides how much money to send.</dd></div>
+              <div class="row"><dt>2. Master key in memory</dt><dd>The agent signs with a full wallet key that can empty the entire balance in one transaction.</dd></div>
+              <div class="row"><dt>3. Blind cross-chain sends</dt><dd>Money leaves immediately. If the swap fails on the other chain, your funds are stuck.</dd></div>
+            </dl>
+          </div>
+          <div class="panel">
+            <h3>With EMET on NEAR</h3>
+            <dl class="rows" style="margin-top:12px">
+              <div class="row"><dt>1. Reader vs. rule checker</dt><dd>The reader extracts the payment details, then all webpage words are stripped before the rule check runs.</dd></div>
+              <div class="row"><dt>2. Limited key + contract rules</dt><dd>The agent only holds a <span class="mono">FunctionCall</span> key. The NEAR contract checks token lists, return rates, and spend caps.</dd></div>
+              <div class="row"><dt>3. Escrow until delivery</dt><dd>Funds stay held until <span class="mono">v1.signer-prod.testnet</span> verifies the foreign block, or return 100% on failure.</dd></div>
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      <div class="block rule-top">
+        <div class="block-head">
+          <div>
+            <h2 class="section">Proof on NEAR testnet</h2>
+            <p class="section-note">Every attack and cross-chain settlement below was executed against the live contract on NEAR testnet. Click any hash to inspect the receipt on NearBlocks, or verify them in your own browser.</p>
+          </div>
+          <a class="btn ghost small" href="/cockpit#verify">Run browser verifier</a>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>What we tested</th><th>What the contract did</th><th>Receipt on NearBlocks</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Agent signs with a master <span class="mono">FullAccess</span> key</td>
+                <td><span class="tag no">Refused</span> <span class="mono">ERR_FULL_ACCESS_KEY_FORBIDDEN</span></td>
+                <td class="mono"><a href="https://testnet.nearblocks.io/txns/A1G6NJXx1nq5dKN1PsSRPS1mGeGzKC26ut2CFmA4zoPX" target="_blank" rel="noopener">A1G6NJXx…4zoPX</a></td>
+              </tr>
+              <tr>
+                <td>Swap vault funds into unapproved <span class="mono">scamcoin.near</span></td>
+                <td><span class="tag no">Refused</span> <span class="mono">ERR_MISSION_ASSET_BLOCKED</span></td>
+                <td class="mono"><a href="https://testnet.nearblocks.io/txns/DrcMVnrvZhw8Ehov3x7JDvyve9zSTco6K5XFm1X5YhyY" target="_blank" rel="noopener">DrcMVnrv…5YhyY</a></td>
+              </tr>
+              <tr>
+                <td>Bad swap rate (99.99% loss drain)</td>
+                <td><span class="tag no">Refused</span> <span class="mono">ERR_SLIPPAGE_COLLAR_VIOLATION</span></td>
+                <td class="mono"><a href="https://testnet.nearblocks.io/txns/8iUMeLtjNdFpNH2nPBi5CDsSRCtTg8TNTjbb41BwuhiG" target="_blank" rel="noopener">8iUMeLtj…wuhiG</a></td>
+              </tr>
+              <tr>
+                <td>Non-owner key tries to raise the spending limit</td>
+                <td><span class="tag no">Refused</span> <span class="mono">ERR_OWNER_KEY_REQUIRED</span></td>
+                <td class="mono"><a href="https://testnet.nearblocks.io/txns/2uTMJzVuLQ4hUGdEVWVFLT4fGHU6Dak67HijWaisADwt" target="_blank" rel="noopener">2uTMJzVu…sADwt</a></td>
+              </tr>
+              <tr>
+                <td>Stuck relayer replays payment nonce #2</td>
+                <td><span class="tag no">Refused</span> <span class="mono">ERR_NON_MONOTONIC_NONCE</span></td>
+                <td class="mono"><a href="https://testnet.nearblocks.io/txns/Am3FRACf9UmW47m68PnvE2fzSxypNo1dMtpq6Yi5BgcU" target="_blank" rel="noopener">Am3FRACf…5BgcU</a></td>
+              </tr>
+              <tr>
+                <td>Foreign chain fails during cross-chain call</td>
+                <td><span class="tag wait">Returned 100%</span> 0.15 NEAR refunded to vault</td>
+                <td class="mono"><a href="https://testnet.nearblocks.io/txns/9MAZxcuYurVzPhr6Drwo5W4WqtZN7kW4CZz82wEUwyxa" target="_blank" rel="noopener">9MAZxcuY…Uwyxa</a></td>
+              </tr>
+              <tr>
+                <td>Finalized BNB Chain block #141,870,103 verified by 11 MPC nodes</td>
+                <td><span class="tag ok">Settled</span> Signed by <span class="mono">v1.signer-prod.testnet</span></td>
+                <td class="mono"><a href="https://testnet.nearblocks.io/txns/FaCMuGXzprkQrLFNKM4MZVeXyHApXK55jWfCMbvHKKte" target="_blank" rel="noopener">FaCMuGXz…HKKte</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <span>EMET, Hebrew for truth.</span>
+    <a href="/cockpit">Open app</a>
+    <a href="https://github.com/GreatSage-dev/emet" target="_blank" rel="noopener">Source on GitHub</a>
+    <a href="https://github.com/GreatSage-dev/emet/blob/main/THREAT_MODEL.md" target="_blank" rel="noopener">Threat model</a>
+    <span class="spacer">MIT licence</span>
+  </div>
+</footer>
+
+</body>
+</html>
