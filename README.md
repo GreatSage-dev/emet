@@ -88,10 +88,11 @@ npm run demo:attack
 ### 4. Compile the Rust Smart Contract From Source (Optional if Rust Installed)
 **Do:**
 ```bash
-npm run build
+npm run build:wasm
 ```
 **See:**
 * Compiles `crates/mpc-verifier` and `crates/settlement-contract` cleanly to `target/wasm32-unknown-unknown/release/emet_settlement_contract.wasm` (`exit code 0`).
+* (`npm run build` builds the Vercel web frontend into `public/` with zero Rust dependency.)
 
 ### 5. Inspect 1Click Dry-Run Quote & Submission Schema
 **Do:**

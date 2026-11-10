@@ -11,10 +11,10 @@ Thank you for contributing to **Emet**, the open-source outcome-verified budget 
 2. **Build & Verify:**
    ```bash
    cargo check --workspace
-   cargo build --target wasm32-unknown-unknown --release
+   npm run build:wasm
+   npm run build
    npm test
    npm run demo:attack
-   npm run build
    ```
 
 ## Pull Request Checklist
