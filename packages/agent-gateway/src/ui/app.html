@@ -927,8 +927,19 @@ npm run deploy:testnet</pre>
 
   /* ---------------- boot ---------------- */
   const legacy = new URLSearchParams(location.search).get("scenario");
+  const legacyMap = {
+    valid_swap: "normal",
+    prompt_injection_drainer: "hidden",
+    scamcoin_trap: "token",
+    x402_oneway_drain: "rate",
+    warn_new_vendor: "vendor",
+  };
   if (legacy && !location.hash) location.hash = "#pay";
   route();
+  if (legacy && legacyMap[legacy]) {
+    pickSample(legacyMap[legacy]);
+    runPay(false);
+  }
 })();
 </script>
 </body>

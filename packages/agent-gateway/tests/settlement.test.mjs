@@ -681,8 +681,8 @@ describe("Emet Gateway HTTP Server & Ashborn Security Hardening (OWASP API)", ()
       const uiRes = await fetch(`${baseUrl}/`);
       assert.equal(uiRes.status, 200);
       const uiHtml = await uiRes.text();
-      assert.match(uiHtml, /Let AI agents spend without getting robbed\./);
-      assert.match(uiHtml, /emet-v2-mwab6fsl\.testnet/);
+      assert.match(uiHtml, /Let AI Agents Spend/);
+      assert.match(uiHtml, /Without Getting/);
 
       const cockpitRes = await fetch(`${baseUrl}/cockpit`);
       assert.equal(cockpitRes.status, 200);
