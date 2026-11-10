@@ -4,7 +4,7 @@
  */
 import crypto from "node:crypto";
 
-export const NEAR_TESTNET_RPC = "https://rpc.testnet.near.org";
+export const NEAR_TESTNET_RPC = "https://test.rpc.fastnear.com";
 export const MPC_SIGNER_CONTRACT = "v1.signer-prod.testnet";
 export const NEAR_INTENTS_1CLICK_API = "https://1click.chaindefuser.com/v0";
 
@@ -364,6 +364,7 @@ export class EmetKernelSimulator {
       maxPerTx: BigInt(maxPerTx),
       epochSpendCap: BigInt(epochSpendCap),
       currentEpochExposure: 0n,
+      epochStartedAtMs: Date.now(),
       allowedCounterparties: new Set(allowedCounterparties),
       allowedTokens: new Set(allowedTokens),
       minReturnBps: Number(minReturnBps),
@@ -519,10 +520,20 @@ export class EmetKernelSimulator {
     }
 
     const bigAmount = BigInt(amount);
+    if (bigAmount <= 0n) {
+      throw new Error(`INVALID_AMOUNT: Amount must be greater than zero`);
+    }
     if (bigAmount > agent.maxPerTx) {
       throw new Error(
         `EXCEEDS_PER_TX_LIMIT: Requested ${bigAmount} exceeds max_per_tx ${agent.maxPerTx}`
       );
+    }
+    const now = Date.now();
+    if (!agent.epochStartedAtMs) {
+      agent.epochStartedAtMs = now;
+    } else if (now - agent.epochStartedAtMs >= 86_400_000) {
+      agent.currentEpochExposure = 0n;
+      agent.epochStartedAtMs = now;
     }
     if (agent.currentEpochExposure + bigAmount > agent.epochSpendCap) {
       throw new Error(

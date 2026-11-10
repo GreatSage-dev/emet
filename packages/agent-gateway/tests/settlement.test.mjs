@@ -628,6 +628,80 @@ describe("Emet Settlement Kernel & Double-Entry Agent Budget Ledger", () => {
     assert.equal(quote.quoteModel, "illustrative_risk_buffer_comparison");
     assert.equal(quote.spreadSavedUnits, "47500000");
   });
+
+  it("enforces non-zero positive amounts and rolls over 24h epoch spend cap", () => {
+    const kernel = createInitializedKernel();
+
+    // 1. Zero or negative amounts are rejected
+    assert.throws(
+      () =>
+        kernel.initiateIntent({
+          intentId: "intent-zero",
+          agentId: "agent-alpha.near",
+          counterpartyId: "solver-prime.near",
+          amount: "0",
+          nonce: 1,
+          foreignTxSpec: validSolanaSpec,
+        }),
+      /INVALID_AMOUNT/
+    );
+
+    assert.throws(
+      () =>
+        kernel.initiateIntent({
+          intentId: "intent-negative",
+          agentId: "agent-alpha.near",
+          counterpartyId: "solver-prime.near",
+          amount: "-500",
+          nonce: 2,
+          foreignTxSpec: validSolanaSpec,
+        }),
+      /INVALID_AMOUNT/
+    );
+
+    // 2. Spend up to epoch cap (maxPerTx: 4000000000, epochSpendCap: 6000000000)
+    kernel.initiateIntent({
+      intentId: "intent-epoch-1",
+      agentId: "agent-alpha.near",
+      counterpartyId: "solver-prime.near",
+      amount: "3500000000",
+      nonce: 3,
+      foreignTxSpec: validSolanaSpec,
+    });
+
+    const agent = kernel.agents.get("agent-alpha.near");
+    assert.equal(agent.currentEpochExposure, 3500000000n);
+
+    // Attempt to exceed epoch cap (3500000000 + 3000000000 = 6500000000 > 6000000000)
+    assert.throws(
+      () =>
+        kernel.initiateIntent({
+          intentId: "intent-epoch-exceed",
+          agentId: "agent-alpha.near",
+          counterpartyId: "solver-prime.near",
+          amount: "3000000000",
+          nonce: 4,
+          foreignTxSpec: validSolanaSpec,
+        }),
+      /EXCEEDS_EPOCH_CAP/
+    );
+
+    // 3. Simulate 24-hour epoch rollover (86,400,001 ms elapsed)
+    agent.epochStartedAtMs = Date.now() - 86_400_001;
+
+    // Now spending 3000000000 succeeds because epoch reset exposure to 0
+    const intentAfterRollover = kernel.initiateIntent({
+      intentId: "intent-epoch-rollover",
+      agentId: "agent-alpha.near",
+      counterpartyId: "solver-prime.near",
+      amount: "3000000000",
+      nonce: 5,
+      foreignTxSpec: validSolanaSpec,
+    });
+
+    assert.equal(intentAfterRollover.status, "VerifyingOutcome");
+    assert.equal(agent.currentEpochExposure, 3000000000n);
+  });
 });
 
 describe("Emet Gateway HTTP Server & Ashborn Security Hardening (OWASP API)", () => {

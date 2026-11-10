@@ -791,7 +791,9 @@ npm run deploy:testnet</pre>
   function u32(n) { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n, true); return b; }
   function evmPayload(chain, txIdHex, blockHashHex) {
     // ForeignTxSignPayload::V1 { request: Evm { tx_id, extractors: [BlockHash], finality: Finalized }, values: [EvmBlockHash] }
-    const parts = [Uint8Array.of(0), Uint8Array.of(CHAIN_IDS[chain]), hexToBytes(txIdHex), u32(1), Uint8Array.of(0), Uint8Array.of(2),
+    const key = chain ? chain.charAt(0).toUpperCase() + chain.slice(1).toLowerCase() : "";
+    const chainId = CHAIN_IDS[key] ?? CHAIN_IDS[chain] ?? 1;
+    const parts = [Uint8Array.of(0), Uint8Array.of(chainId), hexToBytes(txIdHex), u32(1), Uint8Array.of(0), Uint8Array.of(2),
       u32(1), Uint8Array.of(1, 0), hexToBytes(blockHashHex)];
     const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
     let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
