@@ -1,25 +1,25 @@
-/* hallmark · v2.0.0 · scope: app · theme: custom "limestone ledger" (stone paper, ink, one forest-green signal, brick for refusals) · type: Instrument Serif / Geist / Geist Mono · signature: live on-chain refusals read in the browser */
-/* critique: app screens favour tables and plain rows over cards; one serif headline per screen; mono only for chain data */
+/* hallmark · v2.0.0 · scope: app · theme: custom "limestone ledger" (stone paper, landing ink & status palette) · type: Geist / Geist Mono · signature: live on-chain refusals read in the browser */
+/* critique: app screens favour tables and plain rows over cards; sharp Geist display heads matching landing page; mono only for chain data */
 
 :root {
   --paper: #f3f3ee;
   --paper-raised: #fbfbf8;
   --paper-sunk: #e9e9e2;
-  --ink: #191a17;
-  --ink-2: #4d4f48;
-  --ink-3: #7c7e75;
+  --ink: #17182b;
+  --ink-2: #52556a;
+  --ink-3: #73768c;
   --rule: #d9d9cf;
   --rule-strong: #b9bab0;
-  --ok: #1e5b45;
-  --ok-wash: #e1ebe4;
-  --no: #983222;
-  --no-wash: #f2e2dc;
-  --wait: #85570f;
-  --wait-wash: #f1e8d6;
-  --focus: #1e5b45;
+  --ok: #059669;
+  --ok-wash: #ecfdf5;
+  --no: #be123c;
+  --no-wash: #fff1f2;
+  --wait: #b45309;
+  --wait-wash: #fffbeb;
+  --focus: #4f46e5;
 
-  --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
-  --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
 
   --measure: 1120px;
@@ -58,7 +58,7 @@ code, .mono { font-family: var(--mono); font-size: 0.875em; }
 }
 .top .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
 .mark { display: flex; align-items: baseline; gap: 8px; text-decoration: none; }
-.mark b { font-family: var(--serif); font-weight: 400; font-size: 30px; letter-spacing: -0.01em; line-height: 1; }
+.mark b { font-family: var(--sans); font-weight: 600; font-size: 20px; letter-spacing: -0.03em; line-height: 1; color: var(--ink); }
 .mark span { font-size: 13px; color: var(--ink-3); }
 .nav { display: flex; gap: 4px; margin-left: auto; }
 .nav a {
@@ -71,17 +71,18 @@ code, .mono { font-family: var(--mono); font-size: 0.875em; }
 .net { font-size: 13px; color: var(--ink-2); border: 1px solid var(--rule-strong); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
 
 /* ---------- type ---------- */
-h1, h2, h3 { font-weight: 400; margin: 0; }
+h1, h2, h3 { font-weight: 600; margin: 0; color: var(--ink); }
 .display {
-  font-family: var(--serif);
-  font-size: clamp(42px, 6vw, 72px);
-  line-height: 1.02;
-  letter-spacing: -0.015em;
+  font-family: var(--sans);
+  font-size: clamp(36px, 4.7vw, 56px);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.045em;
   overflow-wrap: break-word; min-width: 0;
-  max-width: 15ch;
+  max-width: 17ch;
 }
-.lede { font-size: 19px; line-height: 1.5; color: var(--ink-2); max-width: 54ch; margin: 20px 0 0; }
-h2.section { font-family: var(--serif); font-size: clamp(28px, 3.4vw, 38px); line-height: 1.1; letter-spacing: -0.01em; }
+.lede { font-size: 18px; line-height: 1.55; color: var(--ink-2); max-width: 54ch; margin: 18px 0 0; }
+h2.section { font-family: var(--sans); font-size: clamp(24px, 3vw, 32px); font-weight: 600; line-height: 1.15; letter-spacing: -0.035em; }
 .section-note { color: var(--ink-2); margin: 8px 0 0; max-width: 62ch; }
 .small { font-size: 14px; color: var(--ink-3); }
 .muted { color: var(--ink-3); }
@@ -97,15 +98,15 @@ h2.section { font-family: var(--serif); font-size: clamp(28px, 3.4vw, 38px); lin
 
 /* ---------- surfaces ---------- */
 .panel { background: var(--paper-raised); border: 1px solid var(--rule); border-radius: var(--radius); padding: 24px; }
-.panel h3 { font-size: 18px; font-weight: 500; letter-spacing: -0.005em; }
+.panel h3 { font-size: 18px; font-weight: 500; letter-spacing: -0.015em; }
 
 /* figures */
 .figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); }
 .figure { padding: 20px 20px 22px 0; }
 .figure + .figure { padding-left: 20px; border-left: 1px solid var(--rule); }
 .figure dt { font-size: 14px; color: var(--ink-2); }
-.figure dd { margin: 6px 0 0; font-family: var(--serif); font-size: clamp(32px, 3.6vw, 44px); line-height: 1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
-.figure dd small { font-family: var(--sans); font-size: 14px; color: var(--ink-3); margin-left: 4px; letter-spacing: 0; }
+.figure dd { margin: 8px 0 0; font-family: var(--sans); font-size: clamp(30px, 3.4vw, 40px); font-weight: 600; line-height: 1.05; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.figure dd small { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--ink-3); margin-left: 5px; letter-spacing: 0; }
 .source { margin-top: 12px; font-size: 13px; color: var(--ink-3); }
 .source a { color: var(--ink-2); }
 
@@ -138,7 +139,7 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
   border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
   transition: background-color 160ms var(--ease), color 160ms var(--ease), transform 120ms var(--ease), opacity 160ms var(--ease);
 }
-.btn:hover { background: #33352f; }
+.btn:hover { background: #272940; }
 .btn:active { transform: scale(0.98); }
 .btn[disabled] { opacity: 0.5; cursor: progress; }
 .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule-strong); }
@@ -179,7 +180,7 @@ textarea:focus-visible, input:focus-visible { outline: none; border-color: var(-
 .verdict.ok { border-color: var(--ok); }
 .verdict.no { border-color: var(--no); }
 .verdict.wait { border-color: var(--wait); }
-.verdict h3 { font-family: var(--serif); font-size: 30px; line-height: 1.1; font-weight: 400; }
+.verdict h3 { font-family: var(--sans); font-size: 24px; line-height: 1.2; letter-spacing: -0.03em; font-weight: 600; }
 .verdict.ok h3 { color: var(--ok); }
 .verdict.no h3 { color: var(--no); }
 .verdict.wait h3 { color: var(--wait); }
@@ -211,7 +212,7 @@ pre.code {
   font: 13.5px/1.6 var(--mono);
 }
 .step { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 16px; padding: 28px 0; border-bottom: 1px solid var(--rule); }
-.step-n { font-family: var(--serif); font-size: 40px; line-height: 1; color: var(--ink-3); }
+.step-n { font-family: var(--mono); font-size: 26px; font-weight: 600; line-height: 1.1; color: var(--ink-3); }
 .step h3 { font-size: 20px; font-weight: 500; }
 .step p { margin: 6px 0 0; color: var(--ink-2); max-width: 64ch; }
 .copy-row { display: flex; justify-content: flex-end; margin-top: 8px; }
