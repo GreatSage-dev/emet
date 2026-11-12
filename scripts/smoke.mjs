@@ -26,11 +26,12 @@ export async function runSmoke() {
     assert.equal(r2.status, 200);
     console.log(`  ✅ GET /cockpit -> 200 OK`);
 
-    // 3. Adversarial /rob Honeypot Redirect
-    const r3 = await fetch(`${baseUrl}/rob`, { redirect: "manual" });
-    assert.equal(r3.status, 302);
-    assert.equal(r3.headers.get("location"), "/cockpit#break");
-    console.log(`  ✅ GET /rob -> 302 Redirect to /cockpit#break`);
+    // 3. Published Contract Binary (used by browser SHA-256 verification)
+    const r3 = await fetch(`${baseUrl}/emet_settlement_contract.wasm`);
+    assert.equal(r3.status, 200);
+    const wasmBytes = await r3.arrayBuffer();
+    assert.ok(wasmBytes.byteLength > 10_000, "WASM artifact unexpectedly small");
+    console.log(`  ✅ GET /emet_settlement_contract.wasm -> 200 OK (${wasmBytes.byteLength} bytes)`);
 
     // 4. API Health
     const r4 = await fetch(`${baseUrl}/api/health`);

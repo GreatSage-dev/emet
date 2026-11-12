@@ -167,13 +167,6 @@ export function createEmetRequestHandler({
       return;
     }
 
-    // King's Court Rule 8.11: Adversarial Honeypot Ingress (/rob)
-    if (method === "GET" && pathname === "/rob") {
-      res.writeHead(302, { Location: "/cockpit#break" });
-      res.end();
-      return;
-    }
-
     // Published contract binary, re-hashed by the browser on /cockpit#verify
     if (method === "GET" && pathname === "/emet_settlement_contract.wasm") {
       const wasmPath = path.resolve(__dirname, "../../../artifacts/emet_settlement_contract.wasm");
@@ -585,6 +578,20 @@ export function createEmetRequestHandler({
         });
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ status: "reconciled", receipt }));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    // ROUTE 7E: Permissionless Deadline Timeout Refund (if verification never arrives)
+    if (method === "POST" && pathname === "/api/intents/expire") {
+      try {
+        const { intentId } = await readJsonBody(req);
+        const receipt = kernel.claimExpiredIntent({ intentId });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "refunded", receipt }));
       } catch (err) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: err.message }));

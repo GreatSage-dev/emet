@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 export const NEAR_TESTNET_RPC = "https://test.rpc.fastnear.com";
 export const MPC_SIGNER_CONTRACT = "v1.signer-prod.testnet";
 export const NEAR_INTENTS_1CLICK_API = "https://1click.chaindefuser.com/v0";
+export const DEFAULT_VERIFICATION_TIMEOUT_MS = 300_000;
 
 /**
  * Discriminant map matching `near-mpc-contract-interface::types::ForeignChainRpcRequest` v3.18.0.
@@ -571,6 +572,7 @@ export class EmetKernelSimulator {
     callerId = "emet.near",
     intentId,
     verdict,
+    nowMs = Date.now(),
   }) {
     if (callerId !== "emet.near") {
       throw new Error("PRIVATE_CALLBACK_ONLY: Only emet.near private callback can settle or refund intents");
@@ -583,38 +585,73 @@ export class EmetKernelSimulator {
       throw new Error(`INTENT_NOT_VERIFYING: ${intentId}`);
     }
 
+    const settled =
+      verdict.type === "Extracted" &&
+      verdict.payloadHash === intent.expectedPayloadHash;
+
+    const receiptStatus = settled
+      ? {
+          state: "Settled",
+          mpcPayloadHash: verdict.payloadHash,
+          mpcSignatureHex: verdict.signatureHex,
+        }
+      : {
+          state: "Refunded",
+          reason:
+            verdict.reason ??
+            `MPC verification rejected outcome (${verdict.type}) — funds restored to agent available budget`,
+        };
+
+    return this._finalizeIntent({ intent, settled, receiptStatus, issuedAtMs: nowMs });
+  }
+
+  claimExpiredIntent({
+    intentId,
+    nowMs = Date.now(),
+  }) {
+    const intent = this.intents.get(intentId);
+    if (!intent) {
+      throw new Error(`INTENT_NOT_FOUND: ${intentId}`);
+    }
+    if (intent.status !== "VerifyingOutcome") {
+      throw new Error(`INTENT_NOT_VERIFYING: ${intentId}`);
+    }
+    const expiresAtMs = intent.createdAtMs + DEFAULT_VERIFICATION_TIMEOUT_MS;
+    if (nowMs < expiresAtMs) {
+      throw new Error(
+        `INTENT_NOT_EXPIRED: Cannot reclaim before verification deadline (${nowMs} < ${expiresAtMs})`
+      );
+    }
+
+    return this._finalizeIntent({
+      intent,
+      settled: false,
+      receiptStatus: {
+        state: "Refunded",
+        reason: `Verification deadline exceeded (${DEFAULT_VERIFICATION_TIMEOUT_MS}ms TTL elapsed) — escrow returned in full`,
+      },
+      issuedAtMs: nowMs,
+    });
+  }
+
+  _finalizeIntent({ intent, settled, receiptStatus, issuedAtMs }) {
     const agent = this.agents.get(intent.agentId);
     const bigAmount = BigInt(intent.amount);
     agent.inFlightLocked -= bigAmount;
 
-    let receiptStatus;
-    if (
-      verdict.type === "Extracted" &&
-      verdict.payloadHash === intent.expectedPayloadHash
-    ) {
+    if (settled) {
       agent.settledSpent += bigAmount;
       intent.status = "Settled";
-      receiptStatus = {
-        state: "Settled",
-        mpcPayloadHash: verdict.payloadHash,
-        mpcSignatureHex: verdict.signatureHex,
-      };
     } else {
       agent.availableBalance += bigAmount;
       agent.refundedSaved += bigAmount;
       agent.currentEpochExposure -= bigAmount;
       intent.status = "Refunded";
-      receiptStatus = {
-        state: "Refunded",
-        reason:
-          verdict.reason ??
-          `MPC verification rejected outcome (${verdict.type}) — funds restored to agent available budget`,
-      };
     }
 
     const receipt = {
-      receiptId: `rcpt-${intentId}`,
-      intentId,
+      receiptId: `rcpt-${intent.intentId}`,
+      intentId: intent.intentId,
       agentId: intent.agentId,
       counterpartyId: intent.counterpartyId,
       targetChain: intent.targetChain,
@@ -623,7 +660,7 @@ export class EmetKernelSimulator {
       naiveUnverifiedSpreadBps: 200,
       expectedPayloadHash: intent.expectedPayloadHash,
       status: receiptStatus,
-      issuedAtMs: Date.now(),
+      issuedAtMs,
     };
     this.receipts.set(receipt.receiptId, receipt);
     return receipt;

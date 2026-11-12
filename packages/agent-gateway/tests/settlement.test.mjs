@@ -388,6 +388,43 @@ describe("Compiled Rust Smart Contract (.wasm) In-VM & NEAR ABI Firewall", () =>
     assert.equal(finalLedger.settled_spent, "200000000000000000000000");
     assert.equal(finalLedger.refunded_saved, "150000000000000000000000");
     assert.equal(finalLedger.last_nonce, 2);
+
+    // 4. Stalled verification blocks early expiry claim and allows permissionless reclaim after 5m TTL
+    host.context.input = JSON.stringify({
+      intent_id: "wasm-ttl-expire-3",
+      counterparty_id: "solver-prime.near",
+      amount: "100000000000000000000000",
+      amount_out: "99500000000000000000000",
+      token_out: "bnb:USDC",
+      nonce: 3,
+      chain: "Bnb",
+      dispatch_mpc: false,
+    });
+    instance.exports.initiate_intent();
+    const lock3 = host.getReturnJson();
+    assert.equal(lock3.status, "VerifyingOutcome");
+
+    const startNs = host.context.blockTimestampNs;
+    host.context.predecessorAccountId = "anyone.near";
+    host.context.signerAccountPk = Buffer.from("00" + "99".repeat(32), "hex");
+    host.context.blockTimestampNs = startNs + 299_999_000_000n;
+    host.context.input = JSON.stringify({ intent_id: "wasm-ttl-expire-3" });
+    assert.throws(() => instance.exports.claim_expired_intent(), /ERR_INTENT_NOT_EXPIRED/);
+
+    host.context.blockTimestampNs = startNs + 300_000_000_000n;
+    instance.exports.claim_expired_intent();
+    const expiredOut = host.getReturnJson();
+    assert.equal(expiredOut.status.state, "Refunded");
+
+    host.context.predecessorAccountId = "emet-v2-mwab6fsl.testnet";
+    assert.throws(() => instance.exports.on_foreign_tx_verified(), /ERR_INTENT_NOT_VERIFYING/);
+
+    host.context.input = JSON.stringify({ agent_id: "emet-v2-mwab6fsl.testnet" });
+    instance.exports.get_agent_ledger();
+    const postExpireLedger = host.getReturnJson();
+    assert.equal(postExpireLedger.available_balance, "300000000000000000000000");
+    assert.equal(postExpireLedger.in_flight_locked, "0");
+    assert.equal(postExpireLedger.refunded_saved, "250000000000000000000000");
   });
 });
 
@@ -762,7 +799,7 @@ describe("Emet Gateway HTTP Server & Ashborn Security Hardening (OWASP API)", ()
       assert.equal(cockpitRes.status, 200);
       const cockpitHtml = await cockpitRes.text();
       assert.match(cockpitHtml, /A wallet your agent can&#39;t empty\.|A wallet your agent can't empty\./);
-      assert.match(cockpitHtml, /Six ways to rob an agent\. Six refusals\./);
+      assert.match(cockpitHtml, /Six attacks on the contract\. Six refusals\./);
       assert.match(cockpitHtml, /Don&#39;t trust this page\. Ask the chain\.|Don't trust this page\. Ask the chain\./);
       assert.doesNotMatch(cockpitHtml, /pick_a_test/);
 
@@ -973,6 +1010,57 @@ describe("Emet Gateway HTTP Server & Ashborn Security Hardening (OWASP API)", ()
       assert.equal(vercelStatus, 200);
       const vercelJson = JSON.parse(vercelRawBody);
       assert.equal(vercelJson.status, "BLOCK");
+
+      // 12. Permissionless deadline expiry refund on JS simulator kernel & HTTP route
+      const expireMissingRes = await fetch(`${baseUrl}/api/intents/expire`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intentId: "non-existent-ttl" }),
+      });
+      assert.equal(expireMissingRes.status, 400);
+      const expireMissingJson = await expireMissingRes.json();
+      assert.match(expireMissingJson.error, /INTENT_NOT_FOUND/);
+
+      const sim = new EmetKernelSimulator();
+      sim.upsertCounterparty({
+        receiverId: "solver-prime.near",
+        accountAgeDays: 120,
+        isContract: true,
+        codeChangedRecently: false,
+        priorSuccessfulSettlements: 12,
+      });
+      sim.registerAgent({
+        agentId: "ttl-agent.near",
+        ownerId: "owner.near",
+        initialBudget: "100000000",
+        maxPerTx: "50000000",
+        epochSpendCap: "100000000",
+        allowedCounterparties: ["solver-prime.near"],
+      });
+      const simIntent = sim.initiateIntent({
+        intentId: "sim-ttl-1",
+        agentId: "ttl-agent.near",
+        counterpartyId: "solver-prime.near",
+        amount: "25000000",
+        nonce: 1,
+        foreignTxSpec: {
+          chain: "Ethereum",
+          txIdHex: "ab".repeat(32),
+          finality: "Finalized",
+          extractors: [{ type: "BlockHash" }],
+          values: [{ kind: "EvmBlockHash", blockHashHex: "ef".repeat(32) }],
+        },
+      });
+      assert.throws(
+        () => sim.claimExpiredIntent({ intentId: "sim-ttl-1", nowMs: simIntent.createdAtMs + 10_000 }),
+        /INTENT_NOT_EXPIRED/
+      );
+      const simExpiredReceipt = sim.claimExpiredIntent({
+        intentId: "sim-ttl-1",
+        nowMs: simIntent.createdAtMs + 300_000,
+      });
+      assert.equal(simExpiredReceipt.status.state, "Refunded");
+      assert.equal(sim.getAgentLedger("ttl-agent.near").availableBalance, "100000000");
     } finally {
       await gateway.stop();
     }
