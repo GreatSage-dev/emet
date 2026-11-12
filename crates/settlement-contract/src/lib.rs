@@ -33,6 +33,9 @@ pub const MPC_VERIFY_GAS: u64 = 100_000_000_000_000; // 100 Tgas for `v1.signer-
 pub const CALLBACK_GAS: u64 = 50_000_000_000_000;    // 50 Tgas for `on_foreign_tx_verified`
 pub const MIN_REQUIRED_PREPAID_GAS: u64 = MPC_VERIFY_GAS + CALLBACK_GAS + 20_000_000_000_000;
 
+/// Deadline after which any caller may reclaim an intent stuck in `VerifyingOutcome` (5 minutes).
+pub const DEFAULT_VERIFICATION_TIMEOUT_MS: u64 = 300_000;
+
 /// Maximum intents returned in a single paginated view call (`near-contract-audit`: anti-gas-griefing).
 pub const MAX_PAGE_LIMIT: usize = 50;
 
@@ -182,6 +185,11 @@ pub enum KernelError {
     IntentAlreadyExists(String),
     IntentNotFound(String),
     IntentNotVerifying(String),
+    IntentNotExpired {
+        created_at_ms: u64,
+        current_ms: u64,
+        expires_at_ms: u64,
+    },
     ExceedsPerTxLimit { requested: u128, max_per_tx: u128 },
     ExceedsEpochCap { requested_exposure: u128, cap: u128 },
     InsufficientAvailableBudget { requested: u128, available: u128 },
@@ -646,6 +654,118 @@ impl EmetSettlementKernel {
     ) -> Result<SettlementReceipt, KernelError> {
         self.assert_private_callback(ctx)?;
 
+        let intent = self
+            .intents
+            .get(&intent_id)
+            .ok_or_else(|| KernelError::IntentNotFound(intent_id.clone()))?
+            .clone();
+
+        if verdict.is_verified_truth(&intent.expected_payload_hash) {
+            let InspectorVerdict::Extracted(resp) = verdict else {
+                unreachable!()
+            };
+            self.finalize_verifying_intent(
+                ctx,
+                intent_id,
+                IntentStatus::Settled {
+                    verified_at_ms: ctx.block_timestamp_ms,
+                    mpc_payload_hash: resp.payload_hash.to_hex(),
+                    mpc_signature_hex: resp.signature.signature_hex,
+                },
+                true,
+            )
+        } else {
+            let reason = match verdict {
+                InspectorVerdict::TransactionFailed => {
+                    "Foreign chain transaction reverted (TransactionFailed) — ghost deposit blocked"
+                        .to_string()
+                }
+                InspectorVerdict::TransactionNotFound => {
+                    "Foreign chain transaction not found across RPC quorum".to_string()
+                }
+                InspectorVerdict::NonCanonicalBlock {
+                    block_number,
+                    receipt_hash_hex,
+                    canonical_hash_hex,
+                } => format!(
+                    "Non-canonical micro-fork detected at block {block_number} (receipt {receipt_hash_hex} != canonical {canonical_hash_hex})"
+                ),
+                InspectorVerdict::LogIndexOutOfBounds => {
+                    "Extractor log/instruction index out of bounds".to_string()
+                }
+                InspectorVerdict::AccountNotFound => {
+                    "Destination account missing on foreign chain".to_string()
+                }
+                InspectorVerdict::Extracted(resp) => format!(
+                    "MPC payload hash mismatch (expected {}, got {})",
+                    intent.expected_payload_hash.to_hex(),
+                    resp.payload_hash.to_hex()
+                ),
+            };
+
+            self.finalize_verifying_intent(
+                ctx,
+                intent_id,
+                IntentStatus::Refunded {
+                    refunded_at_ms: ctx.block_timestamp_ms,
+                    reason,
+                },
+                false,
+            )
+        }
+    }
+
+    /// Permissionlessly refunds an intent stuck in `VerifyingOutcome` once
+    /// `DEFAULT_VERIFICATION_TIMEOUT_MS` has elapsed without a verified MPC callback.
+    pub fn claim_expired_intent(
+        &mut self,
+        ctx: &ExecutionContext,
+        intent_id: String,
+    ) -> Result<SettlementReceipt, KernelError> {
+        self.assert_initialized()?;
+
+        let intent = self
+            .intents
+            .get(&intent_id)
+            .ok_or_else(|| KernelError::IntentNotFound(intent_id.clone()))?;
+
+        if intent.status != IntentStatus::VerifyingOutcome {
+            return Err(KernelError::IntentNotVerifying(intent_id));
+        }
+
+        let expires_at_ms = intent
+            .created_at_ms
+            .checked_add(DEFAULT_VERIFICATION_TIMEOUT_MS)
+            .ok_or(KernelError::ArithmeticOverflow)?;
+        if ctx.block_timestamp_ms < expires_at_ms {
+            return Err(KernelError::IntentNotExpired {
+                created_at_ms: intent.created_at_ms,
+                current_ms: ctx.block_timestamp_ms,
+                expires_at_ms,
+            });
+        }
+
+        let reason = format!(
+            "Verification deadline exceeded ({DEFAULT_VERIFICATION_TIMEOUT_MS}ms TTL elapsed) — escrow returned in full"
+        );
+        self.finalize_verifying_intent(
+            ctx,
+            intent_id,
+            IntentStatus::Refunded {
+                refunded_at_ms: ctx.block_timestamp_ms,
+                reason,
+            },
+            false,
+        )
+    }
+
+    fn finalize_verifying_intent(
+        &mut self,
+        ctx: &ExecutionContext,
+        intent_id: String,
+        new_status: IntentStatus,
+        settled: bool,
+    ) -> Result<SettlementReceipt, KernelError> {
         let mut intent = self
             .intents
             .get(&intent_id)
@@ -677,11 +797,7 @@ impl EmetSettlementKernel {
             _ => 15,
         };
 
-        if verdict.is_verified_truth(&intent.expected_payload_hash) {
-            let InspectorVerdict::Extracted(resp) = verdict else {
-                unreachable!()
-            };
-
+        if settled {
             agent.settled_spent = U128String(
                 agent
                     .settled_spent
@@ -689,45 +805,11 @@ impl EmetSettlementKernel {
                     .checked_add(intent.amount.0)
                     .ok_or(KernelError::ArithmeticOverflow)?,
             );
-            intent.status = IntentStatus::Settled {
-                verified_at_ms: ctx.block_timestamp_ms,
-                mpc_payload_hash: resp.payload_hash.to_hex(),
-                mpc_signature_hex: resp.signature.signature_hex,
-            };
-
             if let Some(profile) = self.counterparties.get_mut(&intent.counterparty_id) {
                 profile.prior_successful_settlements =
                     profile.prior_successful_settlements.saturating_add(1);
             }
         } else {
-            let reason = match verdict {
-                InspectorVerdict::TransactionFailed => {
-                    "Foreign chain transaction reverted (TransactionFailed) — ghost deposit blocked"
-                        .to_string()
-                }
-                InspectorVerdict::TransactionNotFound => {
-                    "Foreign chain transaction not found across RPC quorum".to_string()
-                }
-                InspectorVerdict::NonCanonicalBlock {
-                    block_number,
-                    receipt_hash_hex,
-                    canonical_hash_hex,
-                } => format!(
-                    "Non-canonical micro-fork detected at block {block_number} (receipt {receipt_hash_hex} != canonical {canonical_hash_hex})"
-                ),
-                InspectorVerdict::LogIndexOutOfBounds => {
-                    "Extractor log/instruction index out of bounds".to_string()
-                }
-                InspectorVerdict::AccountNotFound => {
-                    "Destination account missing on foreign chain".to_string()
-                }
-                InspectorVerdict::Extracted(resp) => format!(
-                    "MPC payload hash mismatch (expected {}, got {})",
-                    intent.expected_payload_hash.to_hex(),
-                    resp.payload_hash.to_hex()
-                ),
-            };
-
             agent.available_balance = U128String(
                 agent
                     .available_balance
@@ -748,12 +830,9 @@ impl EmetSettlementKernel {
                     .0
                     .saturating_sub(intent.amount.0),
             );
-            intent.status = IntentStatus::Refunded {
-                refunded_at_ms: ctx.block_timestamp_ms,
-                reason,
-            };
         }
 
+        intent.status = new_status;
         self.agents.insert(agent.agent_id.clone(), agent);
         self.intents.insert(intent_id.clone(), intent.clone());
 

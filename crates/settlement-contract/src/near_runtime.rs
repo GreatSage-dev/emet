@@ -185,6 +185,16 @@ fn format_kernel_error(e: &crate::KernelError) -> String {
         crate::KernelError::PrivateCallbackOnly => {
             "ERR_PRIVATE_CALLBACK_ONLY: MPC callback rejected from untrusted caller".to_string()
         }
+        crate::KernelError::IntentNotVerifying(id) => {
+            format!("ERR_INTENT_NOT_VERIFYING: Intent '{id}' is already finalized")
+        }
+        crate::KernelError::IntentNotExpired {
+            created_at_ms,
+            current_ms,
+            expires_at_ms,
+        } => format!(
+            "ERR_INTENT_NOT_EXPIRED: Cannot reclaim before deadline ({current_ms} < {expires_at_ms}, created {created_at_ms})"
+        ),
         other => format!("EMET_ERR: {other:?}"),
     }
 }
@@ -1144,15 +1154,35 @@ pub extern "C" fn on_foreign_tx_verified() {
         .on_foreign_tx_verified(&ctx, intent_id.clone(), verdict)
         .unwrap_or_else(|e| near_panic(&format_kernel_error(&e)));
     save_state(&st);
+    emit_reconciled_receipt(&receipt);
+}
 
+#[no_mangle]
+pub extern "C" fn claim_expired_intent() {
+    let mut st = load_state();
+    let raw = env_input_str();
+    let ctx = build_exec_ctx(CallerKeyPermission::FullAccess);
+    let intent_id =
+        json_str(&raw, "intent_id").unwrap_or_else(|| near_panic("EMET_ERR: Missing intent_id"));
+
+    let receipt = st
+        .kernel
+        .claim_expired_intent(&ctx, intent_id)
+        .unwrap_or_else(|e| near_panic(&format_kernel_error(&e)));
+    save_state(&st);
+    emit_reconciled_receipt(&receipt);
+}
+
+fn emit_reconciled_receipt(receipt: &SettlementReceipt) {
     let st_json = status_to_json(&receipt.status);
     near_log(&format!(
-        "EVENT_JSON:{{\"standard\":\"emet\",\"version\":\"1.0.0\",\"event\":\"intent_reconciled\",\"data\":{{\"receipt_id\":\"{}\",\"intent_id\":\"{intent_id}\",\"amount\":\"{}\",\"outcome\":{st_json}}}}}",
-        receipt.receipt_id, receipt.amount.0
+        "EVENT_JSON:{{\"standard\":\"emet\",\"version\":\"1.0.0\",\"event\":\"intent_reconciled\",\"data\":{{\"receipt_id\":\"{}\",\"intent_id\":\"{}\",\"amount\":\"{}\",\"outcome\":{st_json}}}}}",
+        receipt.receipt_id, receipt.intent_id, receipt.amount.0
     ));
     near_return_json(&format!(
-        "{{\"receipt_id\":\"{}\",\"intent_id\":\"{intent_id}\",\"agent_id\":\"{}\",\"counterparty_id\":\"{}\",\"amount\":\"{}\",\"expected_payload_hash\":\"{}\",\"status\":{st_json}}}",
+        "{{\"receipt_id\":\"{}\",\"intent_id\":\"{}\",\"agent_id\":\"{}\",\"counterparty_id\":\"{}\",\"amount\":\"{}\",\"expected_payload_hash\":\"{}\",\"status\":{st_json}}}",
         receipt.receipt_id,
+        receipt.intent_id,
         receipt.agent_id,
         receipt.counterparty_id,
         receipt.amount.0,
@@ -1203,7 +1233,7 @@ pub extern "C" fn get_intent() {
         return;
     };
     near_return_json(&format!(
-        "{{\"intent_id\":\"{}\",\"agent_id\":\"{}\",\"counterparty_id\":\"{}\",\"amount\":\"{}\",\"nonce\":{},\"chain\":\"{}\",\"expected_payload_hash\":\"{}\",\"status\":{}}}",
+        "{{\"intent_id\":\"{}\",\"agent_id\":\"{}\",\"counterparty_id\":\"{}\",\"amount\":\"{}\",\"nonce\":{},\"chain\":\"{}\",\"expected_payload_hash\":\"{}\",\"created_at_ms\":{},\"status\":{}}}",
         i.intent_id,
         i.agent_id,
         i.counterparty_id,
@@ -1211,6 +1241,7 @@ pub extern "C" fn get_intent() {
         i.nonce,
         i.target_chain.label(),
         i.expected_payload_hash.to_hex(),
+        i.created_at_ms,
         status_to_json(&i.status)
     ));
 }

@@ -60,7 +60,7 @@ manifest.codeHash = after.code_hash;
 manifest.transactions.codeUpgrade = {
   txHash: tx.txHash,
   explorerUrl: `https://testnet.nearblocks.io/txns/${tx.txHash}`,
-  note: "Code-only upgrade to the bundled artifact (error-prefix fix). State and receipts unchanged.",
+  note: "Code-only upgrade to add permissionless deadline timeout refund (claim_expired_intent). State and receipts unchanged.",
 };
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 console.log("testnet-deployment.json updated");

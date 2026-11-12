@@ -2,7 +2,7 @@
   "network": "testnet",
   "rpcUrl": "https://test.rpc.fastnear.com",
   "contractId": "emet-v2-mwab6fsl.testnet",
-  "codeHash": "DgkPe1dqrknBUo4VWQMxCHAq7JDF3WHhUcRkRAv7w5kb",
+  "codeHash": "5f2g7teoPSZkjpWiSvLMbL993owsvF6JFwTJMsowXM5r",
   "deployedAtIso": "2026-11-10T06:34:00.744Z",
   "mpcSignerContractId": "v1.signer-prod.testnet",
   "mpcSignerVersion": "3.18.0",
@@ -62,9 +62,9 @@
       "bnbTestnetTxIdHex": "0e56a985b40ca301331be599c04ba5a68e6961b17136b1b9d9ce9c36d5142d14"
     },
     "codeUpgrade": {
-      "txHash": "8zQBygqnXpincxebeczR26Zm3Tp1FsS2JQc7wSNVDaVS",
-      "explorerUrl": "https://testnet.nearblocks.io/txns/8zQBygqnXpincxebeczR26Zm3Tp1FsS2JQc7wSNVDaVS",
-      "note": "Code-only upgrade to the bundled artifact (error-prefix fix). State and receipts unchanged."
+      "txHash": "48MvBe1CRhkxRvFrrngvnhAA3Wp9M471ug5iRDmQuMpe",
+      "explorerUrl": "https://testnet.nearblocks.io/txns/48MvBe1CRhkxRvFrrngvnhAA3Wp9M471ug5iRDmQuMpe",
+      "note": "Code-only upgrade to add permissionless deadline timeout refund (claim_expired_intent). State and receipts unchanged."
     }
   },
   "verifiedOnChainState": {
@@ -130,5 +130,5 @@
       }
     }
   },
-  "previousCodeHash": "CxYkUVjYqvxU3fyf8pk129cgxioCtFBH1NRCXZmeUjrF"
+  "previousCodeHash": "DgkPe1dqrknBUo4VWQMxCHAq7JDF3WHhUcRkRAv7w5kb"
 }

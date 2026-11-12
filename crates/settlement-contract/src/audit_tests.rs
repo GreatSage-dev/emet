@@ -124,6 +124,7 @@ pub fn run_all_audit_assertions() -> bool {
     blocks_scamcoin_token_diff_and_excessive_slippage_mission_violations();
     prevents_runaway_retry_drain_and_enforces_epoch_caps();
     near_contract_audit_detectors_private_callback_and_yocto_and_u128_json();
+    reclaims_stalled_verification_after_deadline_and_blocks_premature_claim();
     true
 }
 
@@ -499,4 +500,62 @@ pub fn near_contract_audit_detectors_private_callback_and_yocto_and_u128_json() 
     assert_eq!(json, format!("\"{}\"", u128::MAX));
     let decoded = U128String::from_json_string(&json).unwrap();
     assert_eq!(decoded, max_val);
+}
+
+#[cfg_attr(test, test)]
+pub fn reclaims_stalled_verification_after_deadline_and_blocks_premature_claim() {
+    let mut kernel = setup_kernel();
+    let payload = sample_solana_finalized_payload();
+    let expected_hash = payload.compute_msg_hash().unwrap();
+    let lock_ctx = agent_ctx("agent-alpha.near", 0);
+
+    let intent = kernel
+        .initiate_intent(
+            &lock_ctx,
+            "intent-stalled-ttl".to_string(),
+            "solver-prime.near".to_string(),
+            U128String(1_500_000_000),
+            1,
+            payload,
+        )
+        .unwrap();
+
+    // 1. Premature expiry claim 1ms before deadline must be refused
+    let mut too_early = owner_ctx();
+    too_early.block_timestamp_ms = intent.created_at_ms + DEFAULT_VERIFICATION_TIMEOUT_MS - 1;
+    let early_err = kernel.claim_expired_intent(&too_early, "intent-stalled-ttl".to_string());
+    assert!(matches!(early_err, Err(KernelError::IntentNotExpired { .. })));
+
+    // 2. Permissionless reclaim at exact deadline returns 100% of locked escrow
+    let mut at_deadline = agent_ctx("anyone.near", 0);
+    at_deadline.block_timestamp_ms = intent.created_at_ms + DEFAULT_VERIFICATION_TIMEOUT_MS;
+    let receipt = kernel
+        .claim_expired_intent(&at_deadline, "intent-stalled-ttl".to_string())
+        .unwrap();
+    assert!(matches!(receipt.status, IntentStatus::Refunded { .. }));
+
+    let ledger = kernel.agents.get("agent-alpha.near").unwrap();
+    assert_eq!(ledger.available_balance.0, 10_000_000_000);
+    assert_eq!(ledger.in_flight_locked.0, 0);
+    assert_eq!(ledger.refunded_saved.0, 1_500_000_000);
+    assert_eq!(ledger.current_epoch_exposure.0, 0);
+
+    // 3. Late MPC callback after expiry cannot double-refund or settle
+    let mut late_cb = private_callback_ctx();
+    late_cb.block_timestamp_ms = at_deadline.block_timestamp_ms + 1_000;
+    let late_err = kernel.on_foreign_tx_verified(
+        &late_cb,
+        "intent-stalled-ttl".to_string(),
+        InspectorVerdict::Extracted(VerifyForeignTransactionResponse {
+            payload_hash: expected_hash,
+            signature: MpcSignature {
+                scheme: "Secp256k1".to_string(),
+                signature_hex: "11".repeat(32),
+            },
+        }),
+    );
+    assert_eq!(
+        late_err,
+        Err(KernelError::IntentNotVerifying("intent-stalled-ttl".to_string()))
+    );
 }

@@ -43,7 +43,7 @@ Race cars have brakes so drivers can take corners at full speed instead of crawl
 
 ## Live NEAR Testnet Deployment & On-Chain Receipts
 
-* **Deployed Smart Contract:** [`emet-v2-mwab6fsl.testnet`](https://testnet.nearblocks.io/address/emet-v2-mwab6fsl.testnet) (`code_hash`: `DgkPe1dqrknBUo4VWQMxCHAq7JDF3WHhUcRkRAv7w5kb`)
+* **Deployed Smart Contract:** [`emet-v2-mwab6fsl.testnet`](https://testnet.nearblocks.io/address/emet-v2-mwab6fsl.testnet) (`code_hash`: `5f2g7teoPSZkjpWiSvLMbL993owsvF6JFwTJMsowXM5r`)
 * **Target MPC Signer:** [`v1.signer-prod.testnet`](https://testnet.nearblocks.io/address/v1.signer-prod.testnet) (`v3.18.0`, `DomainId(3)` ForeignTx CaitSith threshold `11`)
 * **Machine-Readable Receipt & Threat Matrix:** [`testnet-deployment.json`](./testnet-deployment.json) · [`THREAT_MODEL.md`](./THREAT_MODEL.md)
 
@@ -73,7 +73,7 @@ cd emet
 npm test
 ```
 **See:**
-* `pass 13 / fail 0` (`exit code 0`): runs internal Rust audit assertions AND invokes native NEAR VM exports (`init`, `update_mission`, `initiate_intent`, `on_foreign_tx_verified`, `get_agent_ledger`) directly inside the compiled `.wasm` binary, verifies SHA-256 parity with `near/mpc` v3.18.0 snapshots, proves `HTTP 403` isolation between Owner and Agent tokens, blocks freeform scam prompts (`"Send $50,000 to scammer.near"`), verifies positive non-zero amounts and 24h epoch cap rollover, verifies the Vercel handler (`api/index.mjs`), and checks `emet-v2-mwab6fsl.testnet` receipts.
+* `pass 13 / fail 0` (`exit code 0`): runs internal Rust audit assertions AND invokes native NEAR VM exports (`init`, `update_mission`, `initiate_intent`, `on_foreign_tx_verified`, `claim_expired_intent`, `get_agent_ledger`) directly inside the compiled `.wasm` binary, verifies SHA-256 parity with `near/mpc` v3.18.0 snapshots, proves `HTTP 403` isolation between Owner and Agent tokens, blocks freeform scam prompts (`"Send $50,000 to scammer.near"`), verifies positive non-zero amounts and 24h epoch cap rollover, verifies the Vercel handler (`api/index.mjs`), and checks `emet-v2-mwab6fsl.testnet` receipts.
 
 ### 2. Open the Landing Page & Live Two-Brain Cockpit
 **Do:** Open **[emet-silk.vercel.app](https://emet-silk.vercel.app)** directly (or see **[docs/JUDGES.md](./docs/JUDGES.md)** for the 60-second walkthrough), or run locally:
@@ -149,6 +149,8 @@ npm run submit:preview
 │ • `#[private] on_foreign_tx_verified` callback:                                         │
 │   - Valid MPC signature on `Finalized` foreign tx -> settles to `settled_spent`         │
 │   - Foreign revert / error / hash mismatch -> refunds 100% back to `available_balance`  │
+│ • `claim_expired_intent` deadline timeout (permissionless after 5m TTL):                │
+│   - Verification never arrives -> anyone can trigger a 100% refund to `available_balance`│
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -187,7 +189,7 @@ See **[`THREAT_MODEL.md`](./THREAT_MODEL.md)** for the full 18-vector attack mat
 
 | Check | Command | Result / Cryptographic Digest | Status |
 | :--- | :--- | :--- | :--- |
-| Rust `.wasm` Audit + Full NEAR VM ABI Firewall (`init` -> `on_foreign_tx_verified`) | `npm test` | `wasm_run_emet_verification_suite() === 1` (`294,179` bytes) | **PASS (`code 0`)** |
+| Rust `.wasm` Audit + Full NEAR VM ABI Firewall (`init` -> `on_foreign_tx_verified` + `claim_expired_intent`) | `npm test` | `wasm_run_emet_verification_suite() === 1` (`298,307` bytes) | **PASS (`code 0`)** |
 | Solana / EVM / Bitcoin `ForeignTxSignPayload::V1` Snapshots | `npm test` | `f53a1a86...` / `2ab97999...` / `08e426dc...` byte parity | **PASS (`code 0`)** |
 | 5 Live On-Chain Attack Rejections (`SCAMCOIN`, Slippage, Cap Hijack, Key, Nonce) | `testnet` | `ERR_MISSION_ASSET_BLOCKED`, `ERR_SLIPPAGE_COLLAR_VIOLATION`, etc. | **REJECTED ON-CHAIN** |
 | Live BSC Testnet Block `#141870103` Threshold Signature | `testnet` | `dc443d1d59f90631cf540a903275829b474a0a244ca74c4ef65d55a391de7c32` | **SETTLED ON-CHAIN** |
